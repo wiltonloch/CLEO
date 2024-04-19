@@ -25,6 +25,7 @@ executables="$4"  # get from command line argument
 
 spack load cmake@3.23.1%gcc
 module load gcc/11.2.0-gcc-11.2.0
+module load openmpi/4.1.2-gcc-11.2.0
 source activate ${cleoenv}
 
 # load nvhpc compilers if compiling cuda build
