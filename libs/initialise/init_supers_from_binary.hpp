@@ -43,11 +43,12 @@ struct InitSupersFromBinary {
   size_t initnsupers; /**< initial no. of super-droplets to initialise */
   std::filesystem::path initsupers_filename; /**< filename for super-droplets' initial conditons */
   unsigned int nspacedims; /**< number of spatial dimensions to model (0-D, 1-D, 2-D of 3-D) */
+  unsigned int total_gridboxes; /**< number of spatial dimensions to model (0-D, 1-D, 2-D of 3-D) */
 
   /* returns InitSupersData created by reading some data from a binary file and
   filling the rest with un-initialised super-droplets */
   InitSupersData fetch_superdrops_from_file() const {
-    auto initsupers = InitAllSupersFromBinary(initnsupers, initsupers_filename, nspacedims);
+    auto initsupers = InitAllSupersFromBinary(initnsupers, initsupers_filename, nspacedims, total_gridboxes);
     return initsupers.fetch_data();
   }
 
@@ -61,11 +62,12 @@ struct InitSupersFromBinary {
  public:
   /* constructor ensures the number of super-droplets to intialise is >= maxiumum number of
    * superdrops*/
-  explicit InitSupersFromBinary(const OptionalConfigParams::InitSupersFromBinaryParams &config)
-      : maxnsupers(config.maxnsupers),
-        initnsupers(config.initnsupers),
-        initsupers_filename(config.initsupers_filename),
-        nspacedims(config.nspacedims) {
+  explicit InitSupersFromBinary(const Config &config)
+      : maxnsupers(config.get_initsupersfrombinary().maxnsupers),
+        initnsupers(config.get_initsupersfrombinary().initnsupers),
+        initsupers_filename(config.get_initsupersfrombinary().initsupers_filename),
+        nspacedims(config.get_initsupersfrombinary().nspacedims),
+        total_gridboxes(config.get_ngbxs()) {
     if (maxnsupers < initnsupers) {
       const std::string err("cannot initialise more than the total number of super-droplets, ie. " +
                             std::to_string(maxnsupers) + " < " + std::to_string(initnsupers));

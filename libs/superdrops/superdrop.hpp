@@ -48,6 +48,7 @@ class Superdrop {
   // using IDType = EmptyID; /**< Type of ID for non-existent superdrop identity */
   [[no_unique_address]] IDType sdId;
   /**< instance of super-droplet identity of Superdrop::IDType */
+  bool should_be_sent;
 
   /**
    * @brief Default constructor requirement for use of Superdrop in Kokkos View

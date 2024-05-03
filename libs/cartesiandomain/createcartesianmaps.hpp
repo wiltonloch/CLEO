@@ -47,7 +47,9 @@ gridbox remains finite. E.g. In the 0-D case, the bounds maps all
 have 1 {key, value} where key=gbxidx=0 and value = {max, min}
 numerical limits, meanwhile volume function returns a value determined
 from the gridfile 'grid_filename' */
-CartesianMaps create_cartesian_maps(const size_t ngbxs, const unsigned int nspacedims,
+CartesianMaps create_cartesian_maps(const size_t total_global_gridboxes,
+                                    const size_t total_local_gridboxes,
+                                    const unsigned int nspacedims,
                                     const std::filesystem::path grid_filename);
 
 #endif  // LIBS_CARTESIANDOMAIN_CREATECARTESIANMAPS_HPP_

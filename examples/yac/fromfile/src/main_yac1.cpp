@@ -28,6 +28,8 @@
 #include <stdexcept>
 #include <string_view>
 
+#include "mpi.h"
+
 #include "cartesiandomain/cartesianmaps.hpp"
 #include "cartesiandomain/cartesianmotion.hpp"
 #include "cartesiandomain/createcartesianmaps.hpp"
@@ -66,15 +68,27 @@ inline CoupledDynamics auto create_coupldyn(const Config &config, const Cartesia
   return FromFileDynamics(config.get_fromfiledynamics(), couplstep, ndims, nsteps);
 }
 
+inline int calculate_gridboxes_per_process(int total_gridboxes) {
+  int comm_size;
+  unsigned int gridboxes_per_process;
+
+  MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+  gridboxes_per_process = total_gridboxes / comm_size;
+
+  return gridboxes_per_process;
+}
+
 inline InitialConditions auto create_initconds(const Config &config) {
-  const InitAllSupersFromBinary initsupers(config.get_initsupersfrombinary());
-  const InitGbxsNull initgbxs(config.get_ngbxs());
+  const InitGbxsNull initgbxs(calculate_gridboxes_per_process(config.get_ngbxs()));
+  const InitAllSupersFromBinary initsupers(config);
 
   return InitConds(initsupers, initgbxs);
 }
 
 inline GridboxMaps auto create_gbxmaps(const Config &config) {
-  const auto gbxmaps = create_cartesian_maps(config.get_ngbxs(), config.get_nspacedims(),
+  int gridboxes_per_process = calculate_gridboxes_per_process(config.get_ngbxs());
+  const auto gbxmaps = create_cartesian_maps(config.get_ngbxs(), gridboxes_per_process,
+                                             config.get_nspacedims(),
                                              config.get_grid_filename());
   return gbxmaps;
 }
@@ -111,7 +125,7 @@ inline Observer auto create_observer(const Config &config, const Timesteps &tste
                                      Dataset<Store> &dataset) {
   const auto obsstep = tsteps.get_obsstep();
   const auto maxchunk = config.get_maxchunk();
-  const auto ngbxs = config.get_ngbxs();
+  const auto ngbxs = calculate_gridboxes_per_process(config.get_ngbxs());
 
   const Observer auto obs0 = StreamOutObserver(obsstep, &step2realtime);
 
@@ -141,6 +155,8 @@ int main(int argc, char *argv[]) {
   if (argc < 2) {
     throw std::invalid_argument("configuration file(s) not specified");
   }
+
+  MPI_Init(&argc, &argv);
 
   Kokkos::Timer kokkostimer;
 
@@ -177,6 +193,8 @@ int main(int argc, char *argv[]) {
 
   const auto ttot = double{kokkostimer.seconds()};
   std::cout << "-----\n Total Program Duration: " << ttot << "s \n-----\n";
+
+  MPI_Finalize();
 
   return 0;
 }

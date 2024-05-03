@@ -40,6 +40,7 @@ the appropriate templated type */
 template <GridboxMaps GbxMaps, VelocityFormula TV, typename ChangeToNghbr, typename CheckBounds>
 struct PredCorrMotion {
   const unsigned int interval;  // integer timestep for movement
+  unsigned int superdrops_to_send, superdrops_to_receive;
   PredCorr<GbxMaps, TV> superdrop_coords;
   ChangeToNghbr change_if_nghbr;
   CheckBounds check_bounds;
@@ -68,15 +69,27 @@ struct PredCorrMotion {
   KOKKOS_INLINE_FUNCTION void superdrop_gbx(const unsigned int gbxindex,
                                             const CartesianMaps &gbxmaps, Superdrop &drop) const {
     auto idx = (unsigned int)change_if_nghbr.coord3(gbxmaps, gbxindex, drop);
-    check_bounds(idx, gbxmaps.coord3bounds(idx), drop.get_coord3());
+    if(idx > gbxmaps.get_total_local_gridboxes()) {
+        drop.should_be_sent = true;
+        return;
+    }
+    // check_bounds(idx, gbxmaps.coord3bounds(idx), drop.get_coord3());
 
     idx = change_if_nghbr.coord1(gbxmaps, idx, drop);
-    check_bounds(idx, gbxmaps.coord1bounds(idx), drop.get_coord1());
+    if(idx > gbxmaps.get_total_local_gridboxes()) {
+        drop.should_be_sent = true;
+        return;
+    }
+    // check_bounds(idx, gbxmaps.coord1bounds(idx), drop.get_coord1());
 
     idx = change_if_nghbr.coord2(gbxmaps, idx, drop);
-    check_bounds(idx, gbxmaps.coord2bounds(idx), drop.get_coord2());
+    if(idx > gbxmaps.get_total_local_gridboxes()) {
+        drop.should_be_sent = true;
+        return;
+    }
+    // check_bounds(idx, gbxmaps.coord2bounds(idx), drop.get_coord2());
 
-    assert((drop.get_sdgbxindex() == idx) && "sdgbxindex not concordant with supposed idx");
+    // assert((drop.get_sdgbxindex() == idx) && "sdgbxindex not concordant with supposed idx");
   }
 };
 

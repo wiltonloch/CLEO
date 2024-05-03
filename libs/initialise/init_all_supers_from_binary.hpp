@@ -32,6 +32,7 @@
 #include <string_view>
 #include <vector>
 
+#include "./config.hpp"
 #include "./initialconditions.hpp"
 #include "./optional_config_params.hpp"
 #include "./readbinary.hpp"
@@ -50,6 +51,7 @@ struct InitAllSupersFromBinary {
   size_t maxnsupers; /**< total number of super-droplets (in kokkos view on device) */
   std::filesystem::path initsupers_filename; /**< filename for super-droplets' initial conditons */
   unsigned int nspacedims; /**< number of spatial dimensions to model (0-D, 1-D, 2-D of 3-D) */
+  unsigned int total_gridboxes;
 
   /* sets initial data for solutes as
   a single SoluteProprties instance */
@@ -82,9 +84,12 @@ struct InitAllSupersFromBinary {
    * @param config Configuration for member variables.
    *
    */
-  explicit InitAllSupersFromBinary(const OptionalConfigParams::InitSupersFromBinaryParams &config)
-      : InitAllSupersFromBinary(config.maxnsupers, config.initsupers_filename, config.nspacedims) {
-    assert((config.maxnsupers == config.initnsupers) &&
+  explicit InitAllSupersFromBinary(const Config &config)
+      : InitAllSupersFromBinary(config.get_initsupersfrombinary().maxnsupers,
+                                config.get_initsupersfrombinary().initsupers_filename,
+                                config.get_initsupersfrombinary().nspacedims,
+                                config.get_ngbxs()) {
+    assert((config.get_initsupersfrombinary().maxnsupers == config.get_initsupersfrombinary().initnsupers) &&
            "configuration parameter not consistent with "
            "initialising all super-droplets from binary");
   }
@@ -103,8 +108,9 @@ struct InitAllSupersFromBinary {
    * @throws std::invalid_argument If the number of super-droplets is wrong.
    */
   InitAllSupersFromBinary(const size_t maxnsupers, const std::filesystem::path initsupers_filename,
-                          const unsigned int nspacedims)
-      : maxnsupers(maxnsupers), initsupers_filename(initsupers_filename), nspacedims(nspacedims) {
+                          const unsigned int nspacedims, const unsigned int total_gridboxes)
+      : maxnsupers(maxnsupers), initsupers_filename(initsupers_filename),
+        nspacedims(nspacedims), total_gridboxes(total_gridboxes) {
     const auto size = fetch_data_size();
 
     if (maxnsupers < size) {
@@ -125,6 +131,8 @@ struct InitAllSupersFromBinary {
   auto get_maxnsupers() const { return maxnsupers; }
 
   auto get_nspacedims() const { return nspacedims; }
+
+  void trim_nonlocal_superdrops(InitSupersData &initdata) const;
 
   /* returns InitSupersData created by reading a binary file and creating a
   SoluteProperties struct. Also checks that the data created has the expected sizes. */

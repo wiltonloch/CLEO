@@ -18,8 +18,8 @@
 ### -------- to compile, and your python script -------- ###
 ### ---------------------------------------------------- ###
 buildtype="openmp"
-path2CLEO=${HOME}/CLEO/
-path2build=${HOME}/CLEO/build_yac1/
+path2CLEO=/work/ka1298/k202167/remotes/cleo/new/CLEO
+path2build=/work/ka1298/k202167/remotes/cleo/new/CLEO/build
 executables="yac1"
 
 pythonscript=${path2CLEO}/examples/yac/fromfile/yac1_fromfile.py

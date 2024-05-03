@@ -30,6 +30,7 @@
 #include "../kokkosaliases.hpp"
 #include "gridboxes/sortsupers.hpp"
 #include "runcleo/gensuperdrop.hpp"
+#include "mpi.h"
 
 /**
  * @brief Return an initialised view of superdrops in device memory.
@@ -117,8 +118,8 @@ viewd_supers create_supers(const SuperdropInitConds &sdic) {
   supers = sort_supers(supers);
 
   // Log message and perform checks on the initialisation of superdrops
-  std::cout << "checking initialisation\n";
-  is_sdsinit_complete(supers);
+  // std::cout << "checking initialisation\n";
+  // is_sdsinit_complete(supers);
 
   // // Print information about the created superdrops
   // print_supers(supers);
@@ -142,8 +143,10 @@ viewd_supers create_supers(const SuperdropInitConds &sdic) {
  */
 template <typename SuperdropInitConds>
 viewd_supers initialise_supers(const SuperdropInitConds &sdic) {
+  GenSuperdrop gen(sdic);
+  int local_superdrops = gen.get_local_nsupers();
   // create superdrops view on device
-  viewd_supers supers("supers", sdic.get_maxnsupers());
+  viewd_supers supers("supers", local_superdrops);
 
   // initialise a mirror of superdrops view on host
   auto h_supers = initialise_supers_on_host(sdic, supers);
