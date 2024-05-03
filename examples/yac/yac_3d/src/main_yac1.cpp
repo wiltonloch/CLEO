@@ -67,8 +67,8 @@ inline CoupledDynamics auto create_coupldyn(const Config &config, const Cartesia
 }
 
 inline InitialConditions auto create_initconds(const Config &config) {
+  const InitGbxsNull initgbxs(gridboxes_per_process);
   const InitSupersFromBinary initsupers(config.get_initsupersfrombinary());
-  const InitGbxsNull initgbxs(config.get_ngbxs());
 
   return InitConds(initsupers, initgbxs);
 }

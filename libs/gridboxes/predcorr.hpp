@@ -28,6 +28,7 @@
 
 #include <cassert>
 #include <functional>
+#include <iostream>
 
 #include <Kokkos_Core.hpp>
 #include <Kokkos_Pair.hpp>

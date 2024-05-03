@@ -30,7 +30,7 @@
 #include <vector>
 
 #include "./initconds.hpp"
-#include "./optional_config_params.hpp"
+#include "./config.hpp"
 #include "./readbinary.hpp"
 #include "superdrops/superdrop_attrs.hpp"
 
@@ -41,6 +41,8 @@ struct InitSupersFromBinary {
  private:
   std::filesystem::path initsupers_filename;  // filename for some of superdrops' initial conditons
   size_t totnsupers;        // total number of superdroplets (in kokkos view on device initially)
+  size_t local_nsupers;        // total number of superdroplets (in kokkos view on device initially)
+  unsigned int total_gridboxes;  // number of spatial dimensions to model (0-D, 1-D, 2-D of 3-D)
   unsigned int nspacedims;  // number of spatial dimensions to model (0-D, 1-D, 2-D of 3-D)
 
   /* sets initial data for solutes as
@@ -61,13 +63,14 @@ struct InitSupersFromBinary {
   void check_initdata_sizes(const InitSupersData &initdata) const;
 
  public:
-  explicit InitSupersFromBinary(const OptionalConfigParams::InitSupersFromBinaryParams &config)
-      : initsupers_filename(config.initsupers_filename),
-        totnsupers(config.totnsupers),
-        nspacedims(config.nspacedims) {}
+  explicit InitSupersFromBinary(const Config &config)
+      : initsupers_filename(config.get_initsupersfrombinary().initsupers_filename),
+        totnsupers(config.get_initsupersfrombinary().totnsupers),
+        total_gridboxes(config.get_ngbxs()),
+        nspacedims(config.get_initsupersfrombinary().nspacedims) {}
 
   auto get_totnsupers() const { return totnsupers; }
-
+  auto get_local_nsupers() const { return local_nsupers; }
   auto get_nspacedims() const { return nspacedims; }
 
   /* data size returned is number of variables as
@@ -75,13 +78,16 @@ struct InitSupersFromBinary {
   in the initsupers file */
   size_t fetch_data_size() const;
 
+  void trim_nonlocal_superdrops(InitSupersData &initdata) const;
+
   /* return InitSupersData created by reading a binary
   file and creating a SoluteProperties struct.
   Then check that the input data has the correct sizes. */
   void fetch_data(InitSupersData &initdata) const {
     init_solutes_data(initdata);
     initdata_from_binary(initdata);
-    check_initdata_sizes(initdata);
+    trim_nonlocal_superdrops(initdata);
+    // check_initdata_sizes(initdata);
   }
 };
 

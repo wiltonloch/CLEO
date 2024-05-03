@@ -22,6 +22,7 @@
  */
 
 #include "initialise/initsupers_frombinary.hpp"
+#include "mpi.h"
 
 /* sets initial data for solutes as
 a single SoluteProprties instance */
@@ -64,18 +65,41 @@ void InitSupersFromBinary::check_initdata_sizes(const InitSupersData &in) const 
 void InitSupersFromBinary::read_initdata_binary(InitSupersData &initdata, std::ifstream &file,
                                                 const std::vector<VarMetadata> &meta) const {
   initdata.sdgbxindexes = vector_from_binary<unsigned int>(file, meta.at(0));
+  initdata.xis          = vector_from_binary<uint64_t>(file, meta.at(1));
+  initdata.radii        = vector_from_binary<double>(file, meta.at(2));
+  initdata.msols        = vector_from_binary<double>(file, meta.at(3));
+  initdata.coord3s      = vector_from_binary<double>(file, meta.at(4));
+  initdata.coord1s      = vector_from_binary<double>(file, meta.at(5));
+  initdata.coord2s      = vector_from_binary<double>(file, meta.at(6));
+}
 
-  initdata.xis = vector_from_binary<uint64_t>(file, meta.at(1));
+void InitSupersFromBinary::trim_nonlocal_superdrops(InitSupersData &initdata) const {
+    int comm_size, my_rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
-  initdata.radii = vector_from_binary<double>(file, meta.at(2));
+    unsigned int total_local_gridboxes = total_gridboxes / comm_size;
+    unsigned int gridboxes_index_start = total_local_gridboxes * my_rank;
+    unsigned int gridboxes_index_end = gridboxes_index_start + total_local_gridboxes;
+    unsigned int gridbox_index = 0;
 
-  initdata.msols = vector_from_binary<double>(file, meta.at(3));
-
-  initdata.coord3s = vector_from_binary<double>(file, meta.at(4));
-
-  initdata.coord1s = vector_from_binary<double>(file, meta.at(5));
-
-  initdata.coord2s = vector_from_binary<double>(file, meta.at(6));
+    for(size_t superdrop_index = 0; superdrop_index < initdata.sdgbxindexes.size();) {
+        gridbox_index = initdata.sdgbxindexes[superdrop_index];
+        if(gridbox_index < gridboxes_index_start || gridbox_index > gridboxes_index_end) {
+            // removes superdrops which are in gridboxes not owned by this process
+            initdata.sdgbxindexes.erase(initdata.sdgbxindexes.begin() + superdrop_index);
+            initdata.xis.erase(initdata.xis.begin() + superdrop_index);
+            initdata.radii.erase(initdata.radii.begin() + superdrop_index);
+            initdata.msols.erase(initdata.msols.begin() + superdrop_index);
+            initdata.coord3s.erase(initdata.coord3s.begin() + superdrop_index);
+            initdata.coord1s.erase(initdata.coord1s.begin() + superdrop_index);
+            initdata.coord2s.erase(initdata.coord2s.begin() + superdrop_index);
+        } else {
+            // updates superdrop gridbox index from global to local
+            initdata.sdgbxindexes[superdrop_index] -= gridboxes_index_start;
+            superdrop_index++;
+        }
+    }
 }
 
 /* data size returned is number of variables as

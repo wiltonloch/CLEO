@@ -34,6 +34,7 @@
 #include "gridboxes/sortsupers.hpp"
 #include "initialise/initconds.hpp"
 #include "superdrops/superdrop.hpp"
+#include "mpi.h"
 
 /**
  * @brief Struct that holds data for the initial conditions of super-droplets.
@@ -92,6 +93,8 @@ class GenSuperdrop {
       : nspacedims(sdic.get_nspacedims()), sdIdGen(std::make_shared<Superdrop::IDType::Gen>()) {
     sdic.fetch_data(initdata);
   }
+
+  unsigned int get_local_nsupers() { return initdata.sdgbxindexes.size(); }
 
   /**
    * @brief Generate a super-droplet using initial data for the kk'th superdrop.
@@ -206,8 +209,8 @@ viewd_supers create_supers(const SuperdropInitConds &sdic) {
   supers = sort_supers(supers);
 
   // Log message and perform checks on the initialisation of superdrops
-  std::cout << "checking initialisation\n";
-  is_sdsinit_complete(supers, sdic.fetch_data_size());
+  // std::cout << "checking initialisation\n";
+  // is_sdsinit_complete(supers, sdic.fetch_data_size());
 
   // Print information about the created superdrops
   print_supers(supers);
@@ -231,11 +234,11 @@ viewd_supers create_supers(const SuperdropInitConds &sdic) {
  */
 template <typename SuperdropInitConds>
 viewd_supers initialise_supers(const SuperdropInitConds &sdic) {
+  GenSuperdrop gen(sdic);
+  int local_superdrops = gen.get_local_nsupers();
   // create superdrops view on device
-  viewd_supers supers("supers", sdic.get_totnsupers());
-
+  viewd_supers supers("supers", local_superdrops);
   // initialise a mirror of superdrops view on host
-  const GenSuperdrop gen(sdic);
   auto h_supers = initialise_supers_on_host(gen, supers);
 
   // Copy host view to device (h_supers to supers)

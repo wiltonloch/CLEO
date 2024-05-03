@@ -25,6 +25,7 @@
 
 #include <Kokkos_Core.hpp>
 #include <concepts>
+#include <iostream>
 
 #include "../cleoconstants.hpp"
 #include "../kokkosaliases.hpp"
@@ -106,6 +107,17 @@ struct MoveSupersInDomain {
           auto &gbx(d_gbxs(ii));
           gbx.supersingbx.set_refs(team_member);
         });
+
+    // Go through superdrops from back to front and find how many should be sent
+    size_t total_superdrops_to_be_sent = 0;
+    size_t current_superdrop_index = totsupers.extent(0);
+    Superdrop & drop = totsupers(--current_superdrop_index);
+
+    while(drop.sdgbxindex > ngbxs) {
+        if(drop.should_be_sent)
+            total_superdrops_to_be_sent++;
+        drop = totsupers(--current_superdrop_index);
+    }
 
     // /* optional (expensive!) test to raise error if
     // superdrops' gbxindex doesn't match gridbox's gbxindex */

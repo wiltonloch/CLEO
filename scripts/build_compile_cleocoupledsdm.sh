@@ -22,7 +22,7 @@ cleoenv=/work/mh1126/m300950/cleoenv
 buildtype=$1
 path2CLEO=${2:-${HOME}/CLEO}
 path2build=${3:-${path2CLEO}/build} # get from command line argument
-executables="cleocoupledsdm"
+executables="yac1"
 
 ### ---------------------------------------------------- ###
 

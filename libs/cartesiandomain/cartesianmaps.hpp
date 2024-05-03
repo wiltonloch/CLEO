@@ -61,6 +61,7 @@ struct CartesianMaps {
   viewd_ndims ndims;  // dimensions (ie. no. gridboxes) in [coord3, coord1, coord2] directions
   double gbxareas;    // horizontal (x-y planar) area of all gridboxes
   double gbxvolumes;  // volume of all gridboxes
+  unsigned int total_local_gridboxes;
 
  public:
   /* initialise maps with hint for their capacity
@@ -167,6 +168,14 @@ struct CartesianMaps {
 
   KOKKOS_INLINE_FUNCTION
   void set_gbxvolume(const double ivolume) { gbxvolumes = ivolume; }
+
+  KOKKOS_INLINE_FUNCTION
+  void set_total_local_gridboxes(const unsigned int total_local_gridboxes) {
+        this->total_local_gridboxes = total_local_gridboxes;
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  unsigned int get_total_local_gridboxes() const { return total_local_gridboxes; }
 
   /* on host device, throws error if maps are not all
   the same size, else returns size of maps */
