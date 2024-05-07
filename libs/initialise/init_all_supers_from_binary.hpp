@@ -134,6 +134,10 @@ struct InitAllSupersFromBinary {
 
   void trim_nonlocal_superdrops(InitSupersData &initdata) const;
 
+  std::vector<Superdrop::IDType> sdIds_for_uninitialised_superdrops(const size_t size) const;
+
+  InitSupersData add_uninitialised_superdrops_data(InitSupersData &initdata) const;
+
   /* returns InitSupersData created by reading a binary file and creating a
   SoluteProperties struct. Also checks that the data created has the expected sizes. */
   InitSupersData fetch_data() const {
@@ -142,6 +146,8 @@ struct InitAllSupersFromBinary {
     initdata_for_solutes(initdata);
     initdata_for_sdIds(initdata);
     initdata_from_binary(initdata);
+    trim_nonlocal_superdrops(initdata);
+    initdata = add_uninitialised_superdrops_data(initdata);
     check_initdata_sizes(initdata, maxnsupers, nspacedims);
 
     return initdata;

@@ -119,7 +119,7 @@ class RunCLEO {
    * @param genpool Random number generator pool.
    * @return 0 on success.
    */
-  int timestep_cleo(const unsigned int t_end, const dualview_gbx gbxs, const viewd_supers totsupers,
+  int timestep_cleo(const unsigned int t_end, const dualview_gbx gbxs, viewd_supers totsupers,
                     GenRandomPool genpool) const {
     std::cout << "\n--- timestepping ---\n";
 
@@ -220,7 +220,7 @@ class RunCLEO {
    * @param genpool Random number generator pool.
    */
   void sdm_step(const unsigned int t_mdl, unsigned int t_next, dualview_gbx gbxs,
-                const viewd_supers totsupers, GenRandomPool genpool) const {
+                viewd_supers totsupers, GenRandomPool genpool) const {
     gbxs.sync_device();  // get device up to date with host
     sdm.run_step(t_mdl, t_next, gbxs.view_device(), totsupers, genpool);
     gbxs.modify_device();  // mark device view of gbxs as modified

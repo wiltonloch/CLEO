@@ -144,9 +144,10 @@ viewd_supers create_supers(const SuperdropInitConds &sdic) {
 template <typename SuperdropInitConds>
 viewd_supers initialise_supers(const SuperdropInitConds &sdic) {
   GenSuperdrop gen(sdic);
-  int local_superdrops = gen.get_local_nsupers();
+
+  std::cout << "SUPERDROPS: " << gen.get_local_nsupers() << std::endl;
   // create superdrops view on device
-  viewd_supers supers("supers", local_superdrops);
+  viewd_supers supers("supers", gen.get_local_nsupers());
 
   // initialise a mirror of superdrops view on host
   auto h_supers = initialise_supers_on_host(sdic, supers);

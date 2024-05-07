@@ -38,6 +38,7 @@
 #include "coupldyn_fromfile/fromfilecomms.hpp"
 #include "gridboxes/gridboxmaps.hpp"
 #include "initialise/config.hpp"
+// #include "initialise/init_supers_from_binary.hpp"
 #include "initialise/init_all_supers_from_binary.hpp"
 #include "initialise/initgbxsnull.hpp"
 #include "initialise/initialconditions.hpp"

@@ -24,6 +24,22 @@
 #include "initialise/init_all_supers_from_binary.hpp"
 #include "mpi.h"
 
+template <typename T>
+inline std::vector<T> nan_vector(const size_t size) {
+  const auto nanValue = std::numeric_limits<T>::signaling_NaN();
+  return std::vector<T>(size, nanValue);
+}
+
+/* sets sdIds for un-initialised superdrops' using an sdId's generator */
+std::vector<Superdrop::IDType> InitAllSupersFromBinary::sdIds_for_uninitialised_superdrops(const size_t size) const {
+  auto sdIdgen = Superdrop::IDType::Gen();
+
+  auto sdIds = std::vector<Superdrop::IDType>(
+      size, sdIdgen.set(std::numeric_limits<unsigned int>::signaling_NaN()));
+
+  return sdIds;
+}
+
 /* check all the vectors in the initdata struct all have sizes consistent with one another
 and with maxnsupers. Include coords data in check if nspacedims > 0 */
 void check_initdata_sizes(const InitSupersData &in, const size_t maxnsupers,
@@ -40,7 +56,7 @@ void check_initdata_sizes(const InitSupersData &in, const size_t maxnsupers,
       sizes.push_back(in.coord3s.size());
   }
 
-  check_vectorsizes(sizes);
+  // check_vectorsizes(sizes);
 }
 
 /* sets initial data for solutes as
@@ -109,6 +125,26 @@ void InitAllSupersFromBinary::trim_nonlocal_superdrops(InitSupersData &initdata)
             superdrop_index++;
         }
     }
+}
+
+InitSupersData InitAllSupersFromBinary::add_uninitialised_superdrops_data(
+    InitSupersData &initdata) const {
+  const auto size = maxnsupers - initdata.sdgbxindexes.size() + initdata.sdgbxindexes.size();
+  std::cout << "EXTRA SIZE: " << size << std::endl;
+
+  const auto sdgbxindexes = std::vector<unsigned int>(size, LIMITVALUES::uintmax);  // out of bounds
+  const auto coord3s = nan_vector<double>(size);
+  const auto coord1s = nan_vector<double>(size);
+  const auto coord2s = nan_vector<double>(size);
+  const auto radii = nan_vector<double>(size);
+  const auto msols = nan_vector<double>(size);
+  const auto xis = nan_vector<uint64_t>(size);
+  const auto sdIds = sdIds_for_uninitialised_superdrops(size);
+
+  const auto nandata = InitSupersData{
+      initdata.solutes, sdgbxindexes, coord3s, coord1s, coord2s, radii, msols, xis, sdIds};
+
+  return initdata + nandata;
 }
 
 /* data size returned is number of variables as

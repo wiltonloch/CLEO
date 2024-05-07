@@ -44,7 +44,8 @@ std::vector<Superdrop::IDType> InitSupersFromBinary::sdIds_for_uninitialised_sup
 conditions exist for maxnsupers number of superdrops in total */
 InitSupersData InitSupersFromBinary::add_uninitialised_superdrops_data(
     InitSupersData &initdata) const {
-  const auto size = maxnsupers - initdata.sdgbxindexes.size();
+  const auto size = maxnsupers - initdata.sdgbxindexes.size() + initdata.sdgbxindexes.size();
+  std::cout << "EXTRA SIZE: " << size << std::endl;
 
   const auto sdgbxindexes = std::vector<unsigned int>(size, LIMITVALUES::uintmax);  // out of bounds
   const auto coord3s = nan_vector<double>(size);
