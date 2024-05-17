@@ -127,44 +127,37 @@ struct MoveSupersInDomain {
     per_process_send_superdrops[my_rank] = 0;
 
     // Go through superdrops from back to front and find how many should be sent and their indices
-    while(drop.get_sdgbxindex() > ngbxs) {
+    while(drop.get_sdgbxindex() >= ngbxs) {
         if(drop.get_sdgbxindex() < comm_size * 2 * ngbxs) {
-            per_process_send_superdrops  [ (drop.get_sdgbxindex() - ngbxs) / ngbxs]++;
-            superdrops_indices_per_process[ (drop.get_sdgbxindex() - ngbxs) / ngbxs].push_back(superdrop_index);
+            per_process_send_superdrops   [(drop.get_sdgbxindex() - ngbxs) / ngbxs]++;
+            superdrops_indices_per_process[(drop.get_sdgbxindex() - ngbxs) / ngbxs].push_back(superdrop_index);
             total_superdrops_to_send++;
         }
         drop = totsupers(--superdrop_index);
     }
     local_superdrops = superdrop_index + 1;
 
-    // Knowing how many superdroplets will be sent, allocate buffers to serialize their data
-    std::vector<double> superdrops_double_send_data(total_superdrops_to_send * 5);
-    std::vector<unsigned int> superdrops_uint_send_data(total_superdrops_to_send);
-    std::vector<uint64_t> superdrops_uint64_send_data(total_superdrops_to_send);
-
-    // Serialize the data for all superdroplets into the exchange arrays
-    for(int process_index = 0; process_index < comm_size; process_index++)
-        for(int superdrop = 0; superdrop < per_process_send_superdrops[process_index]; superdrop++){
-            superdrop_index = superdrops_indices_per_process[process_index][superdrop];
-            totsupers[superdrop_index].serialize_uint_components(superdrops_uint_send_data.begin() + superdrop);
-            totsupers[superdrop_index].serialize_uint64_components(superdrops_uint64_send_data.begin() + superdrop);
-            totsupers[superdrop_index].serialize_double_components(superdrops_double_send_data.begin() + superdrop * 5);
-        }
-
     // Share how many superdrops each process will send and receive to/from the others
     MPI_Alltoall(per_process_send_superdrops.data(), 1, MPI_INT, per_process_recv_superdrops.data(), 1, MPI_INT, MPI_COMM_WORLD);
     total_superdrops_to_recv = std::accumulate(per_process_recv_superdrops.begin(), per_process_recv_superdrops.end(), 0);
 
-    // Knowing how many superdroplets will be received, allocate buffers to receive data
+    if (local_superdrops + total_superdrops_to_recv > totsupers.extent(0)){
+        std::cout << "MAXIMUM NUMBER OF LOCAL SUPERDROPLETS EXCEEDED" << std::endl;
+        return;
+    }
+
+    // Knowing how many superdroplets will be sent and received, allocate buffers to serialize the data
+    std::vector<double> superdrops_double_send_data(total_superdrops_to_send * 5);
     std::vector<double> superdrops_double_recv_data(total_superdrops_to_recv * 5);
+    std::vector<unsigned int> superdrops_uint_send_data(total_superdrops_to_send);
     std::vector<unsigned int> superdrops_uint_recv_data(total_superdrops_to_recv);
+    std::vector<uint64_t> superdrops_uint64_send_data(total_superdrops_to_send);
     std::vector<uint64_t> superdrops_uint64_recv_data(total_superdrops_to_recv);
 
     // Calculate the send and receive counts and displacements for each of the target processes
     for (int i = 0; i < comm_size; i++) {
         double_send_counts[i] = per_process_send_superdrops[i] * 5;
         double_recv_counts[i] = per_process_recv_superdrops[i] * 5;
-
         if(i > 0) {
             uint_send_displacements[i] = uint_send_displacements[i - 1] + per_process_send_superdrops[i - 1];
             uint_recv_displacements[i] = uint_recv_displacements[i - 1] + per_process_recv_superdrops[i - 1];
@@ -173,56 +166,51 @@ struct MoveSupersInDomain {
         }
     }
 
+    // Serialize the data for all superdroplets into the exchange arrays
+    unsigned int send_superdrop_index = 0;
+    for(int process_index = 0; process_index < comm_size; process_index++)
+        for(int superdrop = 0; superdrop < per_process_send_superdrops[process_index]; superdrop++) {
+            superdrop_index = superdrops_indices_per_process[process_index][superdrop];
+            totsupers[superdrop_index].serialize_uint_components(superdrops_uint_send_data.begin()     + send_superdrop_index);
+            totsupers[superdrop_index].serialize_uint64_components(superdrops_uint64_send_data.begin() + send_superdrop_index);
+            totsupers[superdrop_index].serialize_double_components(superdrops_double_send_data.begin() + send_superdrop_index * 5);
+            send_superdrop_index++;
+        }
+
     // Exchange superdrops uint data
     MPI_Alltoallv(superdrops_uint_send_data.data(), per_process_send_superdrops.data(),
-                  uint_send_displacements.data(), MPI_INT,
+                  uint_send_displacements.data(), MPI_UNSIGNED,
                   superdrops_uint_recv_data.data(), per_process_recv_superdrops.data(),
-                  uint_recv_displacements.data(), MPI_INT,
+                  uint_recv_displacements.data(), MPI_UNSIGNED,
                   MPI_COMM_WORLD);
 
     // Exchange superdrops uint64 data
     MPI_Alltoallv(superdrops_uint64_send_data.data(), per_process_send_superdrops.data(),
-                  uint_send_displacements.data(), MPI_INT,
+                  uint_send_displacements.data(), MPI_UINT64_T,
                   superdrops_uint64_recv_data.data(), per_process_recv_superdrops.data(),
-                  uint_recv_displacements.data(), MPI_INT,
+                  uint_recv_displacements.data(), MPI_UINT64_T,
                   MPI_COMM_WORLD);
 
     // Exchange superdrops double data
     MPI_Alltoallv(superdrops_double_send_data.data(), double_send_counts.data(),
-                  double_send_displacements.data(), MPI_INT,
+                  double_send_displacements.data(), MPI_DOUBLE,
                   superdrops_double_recv_data.data(), double_recv_counts.data(),
-                  double_recv_displacements.data(), MPI_INT,
+                  double_recv_displacements.data(), MPI_DOUBLE,
                   MPI_COMM_WORLD);
 
-    // if(my_rank == 0)
-    //     std::cout << totsupers.extent(0) << std::endl;
+    // Converts global gridbox index to local
+    for (auto &i : superdrops_uint_recv_data)
+        i -= ngbxs;
 
-    if (local_superdrops + total_superdrops_to_recv > totsupers.extent(0)){
-        std::cout << "MAXIMUM NUMBER OF LOCAL SUPERDROPLETS EXCEEDED" << std::endl;
-        return;
+    for(unsigned int i = local_superdrops; i < local_superdrops + total_superdrops_to_recv; i++){
+        int data_offset = i - local_superdrops;
+        totsupers[i].deserialize_components(superdrops_uint_recv_data.begin()   + data_offset,
+                                            superdrops_uint64_recv_data.begin() + data_offset,
+                                            superdrops_double_recv_data.begin() + data_offset * 5);
     }
 
-    // std::cout << my_rank << " " << total_superdrops_to_send << " " << total_superdrops_to_recv << std::endl;
-    //
-    // MPI_Barrier(MPI_COMM_WORLD);
-
-    // // Converts global gridbox index to local
-    // for (auto &i : superdrops_uint_recv_data){
-    //     i -= ngbxs;
-    // }
-    //
-    // for(unsigned int i = local_superdrops; i < local_superdrops + total_superdrops_to_recv; i++){
-    //     totsupers[i].deserialize_components(superdrops_uint_recv_data.begin()   + i,
-    //                                         superdrops_uint64_recv_data.begin() + i,
-    //                                         superdrops_double_recv_data.begin() + i * 5);
-    //     // if(my_rank == 1)
-    //     //     std::cout << "Setting " << i << " from " << local_superdrops + total_superdrops_to_recv << std::endl;
-    //     //     std::cout << "Local superdrop gbx " << totsupers[i].get_sdgbxindex() << std::endl;
-    // }
-    //
-    // for(unsigned int i = local_superdrops + total_superdrops_to_recv; i < totsupers.extent(0); i++) {
-    //     totsupers[i].set_sdgbxindex(LIMITVALUES::uintmax);
-    // }
+    for(unsigned int i = local_superdrops + total_superdrops_to_recv; i < totsupers.extent(0); i++)
+        totsupers[i].set_sdgbxindex(LIMITVALUES::uintmax);
 
     sort_supers(totsupers);
 

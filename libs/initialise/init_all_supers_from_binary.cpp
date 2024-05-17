@@ -110,7 +110,7 @@ void InitAllSupersFromBinary::trim_nonlocal_superdrops(InitSupersData &initdata)
 
     for(size_t superdrop_index = 0; superdrop_index < initdata.sdgbxindexes.size();) {
         gridbox_index = initdata.sdgbxindexes[superdrop_index];
-        if(gridbox_index < gridboxes_index_start || gridbox_index > gridboxes_index_end) {
+        if(gridbox_index < gridboxes_index_start || gridbox_index >= gridboxes_index_end) {
             // removes superdrops which are in gridboxes not owned by this process
             initdata.sdgbxindexes.erase(initdata.sdgbxindexes.begin() + superdrop_index);
             initdata.xis.erase(initdata.xis.begin() + superdrop_index);

@@ -233,12 +233,12 @@ kkpair_size_t correct_neighbor_indices(kkpair_size_t neighbours,
                                        unsigned int gridboxes_slice_end) {
     // If the neighbour index is not local sum total_local_gridboxes so that it can be identified later
     // If the neighbour index is local convert it to a local index by subtracting gridboxes_slice_start
-    if(neighbours.first < gridboxes_slice_start || neighbours.first > gridboxes_slice_end)
+    if(neighbours.first < gridboxes_slice_start || neighbours.first >= gridboxes_slice_end)
         neighbours.first += total_local_gridboxes;
     else
         neighbours.first -= gridboxes_slice_start;
 
-    if(neighbours.second < gridboxes_slice_start || neighbours.second > gridboxes_slice_end)
+    if(neighbours.second < gridboxes_slice_start || neighbours.second >= gridboxes_slice_end)
         neighbours.second += total_local_gridboxes;
     else
         neighbours.second -= gridboxes_slice_start;
