@@ -122,6 +122,7 @@ struct MoveSupersInDomain {
     size_t total_superdrops_to_send      = 0;
     size_t total_superdrops_to_recv      = 0;
     size_t local_superdrops              = 0;
+    unsigned int gridboxes_slice_start   = ngbxs * my_rank;
     size_t superdrop_index               = totsupers.extent(0) - 1;
     Superdrop & drop                     = totsupers(superdrop_index);
     per_process_send_superdrops[my_rank] = 0;
@@ -177,6 +178,10 @@ struct MoveSupersInDomain {
             send_superdrop_index++;
         }
 
+    // Converts global + ngbxs gridbox index to global
+    for (auto &i : superdrops_uint_send_data)
+        i -= ngbxs;
+
     // Exchange superdrops uint data
     MPI_Alltoallv(superdrops_uint_send_data.data(), per_process_send_superdrops.data(),
                   uint_send_displacements.data(), MPI_UNSIGNED,
@@ -200,7 +205,7 @@ struct MoveSupersInDomain {
 
     // Converts global gridbox index to local
     for (auto &i : superdrops_uint_recv_data)
-        i -= ngbxs;
+        i -= gridboxes_slice_start;
 
     for(unsigned int i = local_superdrops; i < local_superdrops + total_superdrops_to_recv; i++){
         int data_offset = i - local_superdrops;
