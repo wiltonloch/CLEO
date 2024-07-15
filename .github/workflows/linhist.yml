@@ -1,0 +1,19 @@
+name: Linhist
+
+on: pull_request
+
+jobs:
+  linhist:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install Linhist
+      run: |
+        git clone https://github.com/wiltonloch/linhist.git
+        cd linhist && pip install .
+
+    - name: Run Linhist
+      run: linhist check-merge --source ${{ github.event.pull_request.head.ref }} \
+                               --target ${{ github.event.pull_request.base.ref }}
