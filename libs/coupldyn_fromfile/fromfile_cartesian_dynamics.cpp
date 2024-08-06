@@ -176,7 +176,7 @@ the x-faces (coord1) of gridboxes */
 CartesianDynamics::get_winds_func CartesianDynamics::get_uvel_from_binary() const {
   const auto func = [&](const unsigned int gbxindex) {
     const auto kij =
-        kijfromindex(ndims, static_cast<size_t>(gbxindex));  // [k,i,j] of gridbox centre on 3D grid
+    kijfromindex(ndims, static_cast<size_t>(gbxindex));  // [k,i,j] of gridbox centre on 3D grid
     const size_t nxfaces(ndims[1] + 1);                      // no. x faces to same 3D grid
 
     size_t lpos(nxfaces * ndims[0] * kij[2] + ndims[0] * kij[1] +
@@ -196,7 +196,7 @@ the y-faces (coord2) of gridboxes */
 CartesianDynamics::get_winds_func CartesianDynamics::get_vvel_from_binary() const {
   const auto func = [&](const unsigned int gbxindex) {
     const size_t lpos(static_cast<size_t>(gbxindex) +
-                      pos_yface);                    // position of y lower face in 1D vvel vector
+    pos_yface);                    // position of y lower face in 1D vvel vector
     const size_t uppos(lpos + ndims[1] * ndims[0]);  // position of x upper face
 
     return std::pair(vvel_yfaces.at(lpos), vvel_yfaces.at(uppos));

@@ -340,7 +340,7 @@ int find_best_decomposition(std::vector<std::vector<size_t>> & factors,
                             const std::vector<size_t> ndims) {
   std::array<size_t, 3> partition_origin, partition_size;
   int comm_size, best_factorization = -1;
-  double vertical_split_penalization = 0.5;
+  double vertical_split_penalization = 1.0;
 
   MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
 
