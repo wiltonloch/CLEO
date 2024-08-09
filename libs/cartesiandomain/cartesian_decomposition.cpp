@@ -24,6 +24,8 @@
 #include <cmath>
 #include <cassert>
 #include <algorithm>
+#include <iostream>
+#include <limits>
 #include <mpi.h>
 
 #include "cartesiandomain/domainboundaries.hpp"
@@ -48,6 +50,94 @@ std::array<size_t, 3> CartesianDecomposition::get_local_partition_size() const {
     return partition_sizes[my_rank];
 };
 
+void CartesianDecomposition::set_gridbox_size(double z_size, double y_size, double x_size) {
+    gridbox_size[0] = z_size;
+    gridbox_size[1] = y_size;
+    gridbox_size[2] = x_size;
+};
+
+void CartesianDecomposition::set_dimensions_bound_behavior(std::array<size_t, 3> behaviors) {
+    dimension_bound_behavior = behaviors;
+}
+
+int get_multiplications_to_turn_int(double entry_value) {
+    int total_multiplications = 0;
+    while (std::round(entry_value) != entry_value) {
+        entry_value *= 1e1;
+        total_multiplications++;
+    }
+    return total_multiplications;
+}
+
+size_t
+CartesianDecomposition::get_local_bounding_gridbox(std::array<double, 3> & coordinates) const {
+    auto partition_size = get_local_partition_size();
+    std::array<size_t, 3> bounding_gridbox_coordinates;
+    std::array<int, 3> external_direction = {0, 0, 0};
+    bool local_coordinate = true;
+
+    for (auto dimension : {0, 1, 2})
+        if (coordinates[dimension] < domain_begin_coordinates[dimension]) {
+            if (dimension_bound_behavior[dimension] == 0)
+                return LIMITVALUES::uintmax;
+            external_direction[dimension] -= 1;
+            local_coordinate = false;
+        } else if (coordinates[dimension] > domain_end_coordinates[dimension]) {
+            if (dimension_bound_behavior[dimension] == 0)
+                return LIMITVALUES::uintmax;
+            external_direction[dimension] += 1;
+            local_coordinate = false;
+        } else if (local_coordinate) {
+            int multiplications = std::max(
+                                  {get_multiplications_to_turn_int(coordinates[dimension]),
+                                  get_multiplications_to_turn_int(
+                                                            domain_begin_coordinates[dimension]),
+                                  get_multiplications_to_turn_int(gridbox_size[dimension])});
+            int64_t integer_coordinate   = std::round(coordinates[dimension] *
+                                                       std::pow(10, multiplications));
+            int64_t integer_domain_begin = std::round(domain_begin_coordinates[dimension] *
+                                                       std::pow(10, multiplications));
+            int64_t integer_gridbox_size = std::round(gridbox_size[dimension] *
+                                                       std::pow(10, multiplications));
+            bounding_gridbox_coordinates[dimension] = (integer_coordinate - integer_domain_begin) /
+                                                      integer_gridbox_size;
+        }
+
+    if (local_coordinate) {
+        auto index = get_index_from_coordinates({get_local_partition_size()[0],
+                                                get_local_partition_size()[1],
+                                                get_local_partition_size()[2]},
+                                                bounding_gridbox_coordinates[0],
+                                                bounding_gridbox_coordinates[1],
+                                                bounding_gridbox_coordinates[2]);
+        // if(index == 1115 && my_rank == 0) {
+        //     std::cout << "coordinates:";
+        //     for (auto i : bounding_gridbox_coordinates)
+        //         std::cout << i << " ";
+        //     for (auto i : coordinates)
+        //         std::cout << i << " ";
+        //     std::cout << std::endl;
+        // }
+
+        return index;
+    } else {
+        bool corrected = false;
+        for (auto dimension : {0, 1, 2})
+            if (coordinates[dimension] < 0) {
+                coordinates[dimension] += ndims[dimension] * gridbox_size[dimension];
+                corrected = true;
+            } else if (coordinates[dimension] > ndims[dimension] * gridbox_size[dimension]) {
+                coordinates[dimension] -= ndims[dimension] * gridbox_size[dimension];
+                corrected = true;
+            }
+
+        if (corrected)
+            return get_local_bounding_gridbox(coordinates);
+
+        return (LIMITVALUES::uintmax - 1) - neighboring_processes.at(external_direction);
+    }
+}
+
 int CartesianDecomposition::get_gridbox_owner_process(size_t global_gridbox_index) const {
     // Tests whether the gridbox index is out of the domain
     if (global_gridbox_index == outofbounds_gbxindex())
@@ -71,7 +161,7 @@ int CartesianDecomposition::global_to_local_gridbox_index(size_t global_gridbox_
 
     // Tests whether the gridbox is owned by the local process
     if (my_rank != get_gridbox_owner_process(global_gridbox_index))
-        return -2;
+        return -1;
 
     auto partition_origin = get_local_partition_origin();
     auto partition_size = get_local_partition_size();
@@ -105,8 +195,13 @@ int CartesianDecomposition::local_to_global_gridbox_index(size_t local_gridbox_i
 };
 
 
-bool CartesianDecomposition::create(std::vector<size_t> ndims) {
+bool CartesianDecomposition::create(std::vector<size_t> ndims,
+                                    double gridbox_z_size,
+                                    double gridbox_x_size,
+                                    double gridbox_y_size) {
     this->ndims = ndims;
+    set_gridbox_size(gridbox_z_size, gridbox_x_size, gridbox_y_size);
+
     int comm_size, decomposition_index;
     std::vector<std::vector<size_t>> factorizations;
 
@@ -121,6 +216,11 @@ bool CartesianDecomposition::create(std::vector<size_t> ndims) {
         total_local_gridboxes = partition_sizes[my_rank][0] *
                                 partition_sizes[my_rank][1] *
                                 partition_sizes[my_rank][2];
+        decomposition = {1, 1, 1};
+
+        calculate_domain_coordinates();
+        calculate_neighboring_processes();
+
         return true;
     }
 
@@ -150,6 +250,10 @@ bool CartesianDecomposition::create(std::vector<size_t> ndims) {
     // Finds the best (most even) decomposition of gridboxes among processes
     decomposition_index = find_best_decomposition(factorizations, ndims);
 
+    decomposition = {factorizations[decomposition_index][0],
+                     factorizations[decomposition_index][1],
+                     factorizations[decomposition_index][2]};
+
     // Saves the origin and sizes of the partitions of all processes
     for (int process = 0; process < comm_size; process++) {
       std::array<size_t, 3> partition_origin;
@@ -164,9 +268,65 @@ bool CartesianDecomposition::create(std::vector<size_t> ndims) {
     total_local_gridboxes = partition_sizes[my_rank][0] *
                             partition_sizes[my_rank][1] *
                             partition_sizes[my_rank][2];
+
+    calculate_domain_coordinates();
+    calculate_neighboring_processes();
+
     return true;
 }
 
+void CartesianDecomposition::calculate_neighboring_processes() {
+    auto my_slice_indices = get_slice_indices_from_partition(my_rank);
+    std::array<int, 3> target_slice = my_slice_indices;
+
+    for (auto k : {-1, 0, 1})
+        for (auto i : {-1, 0, 1})
+            for (auto j : {-1, 0, 1}) {
+                if (i != 0 || j != 0 || k != 0) {
+                    target_slice[0] = my_slice_indices[0] + k;
+                    target_slice[1] = my_slice_indices[1] + i;
+                    target_slice[2] = my_slice_indices[2] + j;
+
+                    for (auto dimension : {0, 1, 2}) {
+                        if (target_slice[dimension] < 0)
+                            target_slice[dimension] = decomposition[dimension] - 1;
+                        if (target_slice[dimension] == decomposition[dimension])
+                            target_slice[dimension] = 0;
+                    }
+
+                    int target_process = get_partition_index_from_slice(target_slice);
+                    neighboring_processes[{k, i, j}] = target_process;
+                }
+            }
+}
+
+void CartesianDecomposition::calculate_domain_coordinates() {
+    int my_rank;
+    auto partition_origin = get_local_partition_origin();
+    auto partition_size = get_local_partition_size();
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+
+    for (int dimension = 0; dimension < 3; dimension++) {
+        int multiplications = get_multiplications_to_turn_int(gridbox_size[dimension]);
+        int64_t integer_gridbox_size = std::round(gridbox_size[dimension] *
+                                                  std::pow(10, multiplications));
+        domain_begin_coordinates[dimension] = partition_origin[dimension] * integer_gridbox_size;
+        domain_begin_coordinates[dimension] /= std::pow(10, multiplications);
+    }
+
+    domain_end_coordinates[0] = domain_begin_coordinates[0] + partition_size[0] * gridbox_size[0];
+    domain_end_coordinates[1] = domain_begin_coordinates[1] + partition_size[1] * gridbox_size[1];
+    domain_end_coordinates[2] = domain_begin_coordinates[2] + partition_size[2] * gridbox_size[2];
+
+
+    // if(my_rank == 0) {
+       std::cout << "coordinates: ";
+       for (auto i : domain_end_coordinates)
+         std::cout << i << " ";
+       std::cout << std::endl;
+    // }
+}
 
 void permute_and_trim_factorizations(std::vector<std::vector<size_t>> & factorizations,
                                      const std::vector<size_t> ndims) {
@@ -224,6 +384,19 @@ int find_best_decomposition(std::vector<std::vector<size_t>> & factors,
     }
 
     return best_factorization;
+}
+
+int CartesianDecomposition::get_partition_index_from_slice(std::array<int, 3> slice_indices) const {
+    return slice_indices[0] * (decomposition[1] * decomposition[2]) +
+           slice_indices[1] * decomposition[2] +
+           slice_indices[2];
+}
+
+std::array<int, 3>
+CartesianDecomposition::get_slice_indices_from_partition(int partition_index) const {
+  return {partition_index / (decomposition[1] * decomposition[2]),
+          (partition_index / decomposition[2]) % decomposition[1],
+          partition_index % decomposition[2]};
 }
 
 void construct_partition(const std::vector<size_t> ndims, std::vector<size_t> decomposition,

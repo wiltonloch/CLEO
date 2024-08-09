@@ -184,7 +184,12 @@ struct CartesianMaps {
     return domain_decomposition.get_total_local_gridboxes();
   }
 
-  void create_decomposition(std::vector<size_t> ndims) { domain_decomposition.create(ndims); }
+  void create_decomposition(std::vector<size_t> ndims,
+                            double gridbox_z_size,
+                            double gridbox_x_size,
+                            double gridbox_y_size) {
+    domain_decomposition.create(ndims, gridbox_z_size, gridbox_x_size, gridbox_y_size);
+  }
 
   /* on host device, throws error if maps are not all
   the same size, else returns size of maps */

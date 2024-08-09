@@ -73,7 +73,14 @@ CartesianMaps create_cartesian_maps(const size_t ngbxs,
   const GbxBoundsFromBinary gfb(ngbxs, nspacedims, grid_filename);
 
   CartesianMaps gbxmaps(gfb.get_ngbxs());
-  gbxmaps.create_decomposition(gfb.ndims);
+
+  gbxmaps.create_decomposition(gfb.ndims,
+                               gfb.get_coord3gbxbounds(0).second -
+                               gfb.get_coord3gbxbounds(0).first,
+                               gfb.get_coord1gbxbounds(0).second -
+                               gfb.get_coord1gbxbounds(0).first,
+                               gfb.get_coord2gbxbounds(0).second -
+                               gfb.get_coord2gbxbounds(0).first);
 
   set_maps_ndims(gfb.ndims, gbxmaps);
   set_outofbounds(gbxmaps);
@@ -262,6 +269,7 @@ void set_3Dmodel_maps(const GbxBoundsFromBinary &gfb, CartesianMaps &gbxmaps) {
   auto partition_origin = domain_decomposition.get_local_partition_origin();
   auto partition_size = domain_decomposition.get_local_partition_size();
   auto total_global_gridboxes = domain_decomposition.get_total_global_gridboxes();
+  domain_decomposition.set_dimensions_bound_behavior({1, 1, 1});
 
   for (size_t k = 0; k < partition_size[0]; k++)
       for (size_t i = 0; i < partition_size[1]; i++)
