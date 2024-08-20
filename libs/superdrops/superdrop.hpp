@@ -301,7 +301,8 @@ class Superdrop {
 
   KOKKOS_INLINE_FUNCTION
   void serialize_uint_components(std::vector<unsigned int>::iterator target) {
-    *target = sdgbxindex;
+    *target++ = sdgbxindex;
+    *target = static_cast<unsigned int>(sdId.get_value());
   }
 
   KOKKOS_INLINE_FUNCTION
@@ -313,7 +314,8 @@ class Superdrop {
   void deserialize_components(std::vector<unsigned int>::iterator uint_source,
                               std::vector<uint64_t>::iterator uint64_source,
                               std::vector<double>::iterator double_source) {
-    sdgbxindex   = *uint_source;
+    sdgbxindex   = *uint_source++;
+    sdId.value   = static_cast<size_t>(*uint_source);
 
     attrs.xi     = *uint64_source;
 

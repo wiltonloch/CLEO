@@ -118,8 +118,15 @@ struct MoveSupersInDomain {
 
       std::vector<int> per_process_send_superdrops(comm_size, 0);
       std::vector<int> per_process_recv_superdrops(comm_size, 0);
+
+      std::vector<int> uint64_send_displacements(comm_size, 0);
+      std::vector<int> uint64_recv_displacements(comm_size, 0);
+
       std::vector<int> uint_send_displacements(comm_size, 0);
       std::vector<int> uint_recv_displacements(comm_size, 0);
+      std::vector<int> uint_send_counts(comm_size, 0);
+      std::vector<int> uint_recv_counts(comm_size, 0);
+
       std::vector<int> double_send_displacements(comm_size, 0);
       std::vector<int> double_recv_displacements(comm_size, 0);
       std::vector<int> double_send_counts(comm_size, 0);
@@ -161,8 +168,8 @@ struct MoveSupersInDomain {
       // buffers to serialize the data
       std::vector<double> superdrops_double_send_data(total_superdrops_to_send * 5);
       std::vector<double> superdrops_double_recv_data(total_superdrops_to_recv * 5);
-      std::vector<unsigned int> superdrops_uint_send_data(total_superdrops_to_send);
-      std::vector<unsigned int> superdrops_uint_recv_data(total_superdrops_to_recv);
+      std::vector<unsigned int> superdrops_uint_send_data(total_superdrops_to_send * 2);
+      std::vector<unsigned int> superdrops_uint_recv_data(total_superdrops_to_recv * 2);
       std::vector<uint64_t> superdrops_uint64_send_data(total_superdrops_to_send);
       std::vector<uint64_t> superdrops_uint64_recv_data(total_superdrops_to_recv);
 
@@ -170,11 +177,19 @@ struct MoveSupersInDomain {
       for (int i = 0; i < comm_size; i++) {
         double_send_counts[i] = per_process_send_superdrops[i] * 5;
         double_recv_counts[i] = per_process_recv_superdrops[i] * 5;
+        uint_send_counts[i] = per_process_send_superdrops[i] * 2;
+        uint_recv_counts[i] = per_process_recv_superdrops[i] * 2;
         if (i > 0) {
           uint_send_displacements[i] = uint_send_displacements[i - 1] +
-                                       per_process_send_superdrops[i - 1];
+                                       uint_send_counts[i - 1];
           uint_recv_displacements[i] = uint_recv_displacements[i - 1] +
-                                       per_process_recv_superdrops[i - 1];
+                                       uint_recv_counts[i - 1];
+
+          uint64_send_displacements[i] = uint64_send_displacements[i - 1] +
+                                         per_process_send_superdrops[i - 1];
+          uint64_recv_displacements[i] = uint64_recv_displacements[i - 1] +
+                                         per_process_recv_superdrops[i - 1];
+
           double_send_displacements[i] = double_send_displacements[i - 1] +
                                          double_send_counts[i - 1];
           double_recv_displacements[i] = double_recv_displacements[i - 1] +
@@ -191,7 +206,7 @@ struct MoveSupersInDomain {
           superdrop_index = superdrops_indices_per_process[process_index][superdrop];
           totsupers[superdrop_index]
                    .serialize_uint_components(superdrops_uint_send_data.begin() +
-                                              send_superdrop_index);
+                                              send_superdrop_index * 2);
           totsupers[superdrop_index]
                    .serialize_uint64_components(superdrops_uint64_send_data.begin() +
                                                 send_superdrop_index);
@@ -202,17 +217,17 @@ struct MoveSupersInDomain {
         }
 
       // Exchange superdrops uint data
-      MPI_Alltoallv(superdrops_uint_send_data.data(), per_process_send_superdrops.data(),
+      MPI_Alltoallv(superdrops_uint_send_data.data(), uint_send_counts.data(),
                     uint_send_displacements.data(), MPI_UNSIGNED,
-                    superdrops_uint_recv_data.data(), per_process_recv_superdrops.data(),
+                    superdrops_uint_recv_data.data(), uint_recv_counts.data(),
                     uint_recv_displacements.data(), MPI_UNSIGNED,
                     MPI_COMM_WORLD);
 
       // Exchange superdrops uint64 data
       MPI_Alltoallv(superdrops_uint64_send_data.data(), per_process_send_superdrops.data(),
-                    uint_send_displacements.data(), MPI_UINT64_T,
+                    uint64_send_displacements.data(), MPI_UINT64_T,
                     superdrops_uint64_recv_data.data(), per_process_recv_superdrops.data(),
-                    uint_recv_displacements.data(), MPI_UINT64_T,
+                    uint64_recv_displacements.data(), MPI_UINT64_T,
                     MPI_COMM_WORLD);
 
       // Exchange superdrops double data
@@ -230,7 +245,7 @@ struct MoveSupersInDomain {
            i < local_superdrops + total_superdrops_to_recv;
            i++) {
         int data_offset = i - local_superdrops;
-        totsupers[i].deserialize_components(superdrops_uint_recv_data.begin()   + data_offset,
+        totsupers[i].deserialize_components(superdrops_uint_recv_data.begin()   + data_offset * 2,
                                             superdrops_uint64_recv_data.begin() + data_offset,
                                             superdrops_double_recv_data.begin() +
                                             data_offset * 5);

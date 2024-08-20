@@ -131,7 +131,7 @@ CartesianDecomposition::get_local_bounding_gridbox(std::array<double, 3> & coord
                 corrected = true;
             }
 
-        if (corrected)
+        if (corrected && neighboring_processes.at(external_direction) == my_rank)
             return get_local_bounding_gridbox(coordinates);
 
         return (LIMITVALUES::uintmax - 1) - neighboring_processes.at(external_direction);
