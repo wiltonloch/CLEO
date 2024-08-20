@@ -54,7 +54,7 @@
 #include "runcleo/sdmmethods.hpp"
 #include "superdrops/microphysicalprocess.hpp"
 #include "superdrops/motion.hpp"
-#include "zarr/dataset.hpp"
+#include "zarr/collective_dataset.hpp"
 #include "zarr/fsstore.hpp"
 
 inline CoupledDynamics auto create_coupldyn(const Config &config, const CartesianMaps &gbxmaps,
@@ -104,7 +104,7 @@ inline Observer auto create_superdrops_observer(const unsigned int interval,
   CollectDataForDataset<Store> auto coord1 = CollectCoord1(dataset, maxchunk);
   CollectDataForDataset<Store> auto coord2 = CollectCoord2(dataset, maxchunk);
 
-  const auto collect_data = coord2 >> coord1 >> coord3 >> sdid;
+  const auto collect_data = sdid >> coord3 >> coord1 >> coord2;
   return SuperdropsObserver(interval, dataset, maxchunk, collect_data);
 }
 
@@ -113,6 +113,7 @@ inline Observer auto create_observer(const Config &config, const Timesteps &tste
                                      Dataset<Store> &dataset, const CartesianMaps &gbxmaps) {
   const auto obsstep = tsteps.get_obsstep();
   const auto maxchunk = config.get_maxchunk();
+  // const auto ngbxs = ;
   const auto ngbxs = gbxmaps.get_total_local_gridboxes();
 
   const Observer auto obs0 = StreamOutObserver(obsstep, &step2realtime);
@@ -121,7 +122,9 @@ inline Observer auto create_observer(const Config &config, const Timesteps &tste
 
   const Observer auto obs2 = GbxindexObserver(dataset, maxchunk, ngbxs);
 
-  const Observer auto obs3 = StateObserver(obsstep, dataset, maxchunk, ngbxs);
+  const Observer auto obs3 = StateObserver(obsstep, dataset, maxchunk,
+                                           gbxmaps.get_domain_decomposition()
+                                                  .get_total_global_gridboxes());
 
   const Observer auto obssd = create_superdrops_observer(obsstep, dataset, maxchunk);
 
@@ -162,6 +165,8 @@ int main(int argc, char *argv[]) {
   {
     /* CLEO Super-Droplet Model (excluding coupled dynamics solver) */
     const SDMMethods sdm(create_sdm(config, tsteps, dataset));
+    dataset.set_decomposition(sdm.gbxmaps.get_domain_decomposition());
+    dataset.set_max_superdroplets(config.get_max_nsupers());
 
     /* Initial conditions for CLEO run */
     const InitialConditions auto initconds = create_initconds(config, sdm.gbxmaps);

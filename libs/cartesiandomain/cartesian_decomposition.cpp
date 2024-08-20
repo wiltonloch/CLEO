@@ -171,12 +171,16 @@ int CartesianDecomposition::global_to_local_gridbox_index(size_t global_gridbox_
                                     local_coordinates[2]);
 };
 
-int CartesianDecomposition::local_to_global_gridbox_index(size_t local_gridbox_index) const {
-  if (local_gridbox_index > total_local_gridboxes)
+int CartesianDecomposition::local_to_global_gridbox_index(size_t local_gridbox_index,
+                                                          int process) const {
+  if (process == -1)
+    process = my_rank;
+
+  if (process == my_rank && local_gridbox_index > total_local_gridboxes)
     return -1;
 
-  auto partition_size = get_local_partition_size();
-  auto partition_origin = get_local_partition_origin();
+  auto partition_size = partition_sizes[process];
+  auto partition_origin = partition_origins[process];
   auto local_coordinates = get_coordinates_from_index({ partition_size[0],
                                                         partition_size[1],
                                                         partition_size[2] },

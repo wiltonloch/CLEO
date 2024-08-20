@@ -69,7 +69,7 @@ class CartesianDecomposition {
     void set_gridbox_size(double z_size, double x_size, double y_size);
     void set_dimensions_bound_behavior(std::array<size_t, 3> behaviors);
 
-    int local_to_global_gridbox_index(size_t local_gridbox_index) const;
+    int local_to_global_gridbox_index(size_t local_gridbox_index, int process = -1) const;
     int global_to_local_gridbox_index(size_t global_gridbox_index) const;
 
     // Checks whether a coordinate is bounded by one specific partition

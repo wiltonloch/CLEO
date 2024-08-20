@@ -31,11 +31,13 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <numeric>
 #include <iostream>
 #include <mpi.h>
 
 #include "zarr/xarray_zarr_array.hpp"
 #include "zarr/zarr_group.hpp"
+#include "cartesiandomain/cartesian_decomposition.hpp"
 
 /**
  * @brief A class representing a dataset made from a Zarr group (i.e. collection of Zarr arrays)
@@ -50,9 +52,109 @@
 template <typename Store>
 class Dataset {
  private:
-  ZarrGroup<Store> group; /**< Reference to the zarr group object. */
-  std::unordered_map<std::string, size_t>
-      datasetdims; /**< map from name of each dimension in dataset to their size */
+  /**< Reference to the zarr group object. */
+  ZarrGroup<Store> group;
+  /**< map from name of each dimension in dataset to their size */
+  std::unordered_map<std::string, size_t> datasetdims;
+  CartesianDecomposition decomposition;
+  std::shared_ptr<std::vector<unsigned int>> global_superdroplet_ordering;
+
+  /**< map from name of each dimension in dataset to their size */
+  std::unordered_map<std::string, std::vector<size_t>> distributed_datasetdims;
+  int my_rank, comm_size;
+
+  void collect_distributed_dim_size(const std::pair<std::string, size_t> &dim) {
+    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+
+    std::vector<size_t> distributed_sizes(comm_size);
+
+    MPI_Gather(&(dim.second), 1, MPI_UNSIGNED_LONG,
+               distributed_sizes.data(), 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+
+    if (my_rank == 0)
+        if (distributed_datasetdims.contains(dim.first))
+            distributed_datasetdims.at(dim.first) = distributed_sizes;
+        else
+            distributed_datasetdims.insert({dim.first, distributed_sizes});
+  }
+
+  template <typename T>
+  Kokkos::View<T*, HostSpace> collect_global_data(Kokkos::View<T*, HostSpace> data,
+                                                  std::vector<std::string> dimnames) const {
+    size_t innermost_dimension = dimnames.size() - 1;
+    if (my_rank == 0) {
+        std::vector<int> receive_displacements(comm_size, 0), receive_counts(comm_size, 0);
+        size_t global_size = std::accumulate(
+                               distributed_datasetdims.at(dimnames[innermost_dimension]).begin(),
+                               distributed_datasetdims.at(dimnames[innermost_dimension]).end(),
+                               0);
+        Kokkos::View<T*, HostSpace> global_data("global_output_data", global_size);
+
+        for (size_t i = 0; i < comm_size; i++) {
+          receive_counts[i] = static_cast<int>(
+                                distributed_datasetdims.at(dimnames[innermost_dimension])[i]);
+          if (i > 0)
+              receive_displacements[i] =
+                receive_displacements[i - 1] +
+                distributed_datasetdims.at(dimnames[innermost_dimension])[i - 1];
+        }
+
+        if (dimnames[innermost_dimension] == "gbxindex") {
+            if (dimnames.size() == 1)
+                for (size_t i = 0; i < decomposition.get_total_global_gridboxes(); i++)
+                    global_data[i] = i;
+            else {
+                std::vector<T> receive_target(global_size);
+                collect_global_array(receive_target.data(), data.data(),
+                                     distributed_datasetdims.at(dimnames[innermost_dimension])[0],
+                                     receive_counts.data(), receive_displacements.data());
+                correct_gridbox_data(dimnames[innermost_dimension],
+                                     global_data.data(), receive_target.data());
+            }
+        } else
+            collect_global_array(global_data.data(), data.data(),
+                                 distributed_datasetdims.at(dimnames[innermost_dimension])[0],
+                                 receive_counts.data(), receive_displacements.data());
+
+        return global_data;
+    } else {
+        if (dimnames.size() != 1)
+            collect_global_array(nullptr, data.data(),
+                                 datasetdims.at(dimnames[innermost_dimension]),
+                                 nullptr, nullptr);
+
+        Kokkos::View<T*, HostSpace> view;
+        return view;
+    }
+  }
+
+  template <typename T>
+  void correct_gridbox_data(std::string dimension, T * target, T * source) const {
+    int process = 0;
+    size_t offset = 0;
+    for (int process = 0; process < comm_size; process++) {
+        for (size_t i = 0;
+             i < distributed_datasetdims.at(dimension)[process];
+             i++) {
+            size_t global_gridbox_index = decomposition.local_to_global_gridbox_index(i, process);
+            target[global_gridbox_index] = source[offset + i];
+        }
+        offset += distributed_datasetdims.at(dimension)[process];
+    }
+  }
+
+  void collect_global_array(float * target, float * local_source, int local_size,
+                             int * receive_counts, int * receive_displacements) const {
+    MPI_Gatherv(local_source, local_size, MPI_FLOAT,
+                target, receive_counts, receive_displacements, MPI_FLOAT, 0, MPI_COMM_WORLD);
+  }
+
+  void collect_global_array(unsigned int * target, unsigned int * local_source, int local_size,
+                             int * receive_counts, int * receive_displacements) const {
+    MPI_Gatherv(local_source, local_size, MPI_UNSIGNED,
+                target, receive_counts, receive_displacements, MPI_UNSIGNED, 0, MPI_COMM_WORLD);
+  }
 
   /**
    * @brief Adds a dimension to the dataset.
@@ -60,7 +162,13 @@ class Dataset {
    * @param dim A pair containing the name and size of the dimension to be added.
    */
   void add_dimension(const std::pair<std::string, size_t> &dim) {
-    datasetdims.insert({dim.first, dim.second});
+    collect_distributed_dim_size(dim);
+    size_t dim_size = dim.second;
+    if (my_rank == 0 && dim.first != "time")
+      dim_size = std::accumulate(distributed_datasetdims.at(dim.first).begin(),
+                                 distributed_datasetdims.at(dim.first).end(), 0);
+
+    datasetdims.insert({dim.first, dim_size});
   }
 
  public:
@@ -72,12 +180,14 @@ class Dataset {
    *
    * @param store The store object associated with the Dataset.
    */
-  explicit Dataset(Store &store) : group(store), datasetdims() {
+  explicit Dataset(Store &store) :
+        group(store), datasetdims() {
     store[".zattrs"] =
         "{\n"
         "  \"creator\": \"Clara Bayley\",\n"
         "  \"title\": \"Dataset from CLEO is Xarray and NetCDF compatible Zarr Group of Arrays\""
         "\n}";
+        global_superdroplet_ordering = std::make_shared<std::vector<unsigned int>>();
   }
 
   /**
@@ -88,13 +198,29 @@ class Dataset {
    */
   size_t get_dimension(const std::string &dimname) const { return datasetdims.at(dimname); }
 
+
   /**
    * @brief Sets the size of an existing dimension in the dataset.
    *
    * @param dim A pair containing the name of the dimension and its new size to be set.
    */
   void set_dimension(const std::pair<std::string, size_t> &dim) {
-    datasetdims.at(dim.first) = dim.second;
+    collect_distributed_dim_size(dim);
+    size_t dim_size = dim.second;
+
+    if (my_rank == 0 && dim.first != "time")
+        dim_size = std::accumulate(distributed_datasetdims.at(dim.first).begin(),
+                                   distributed_datasetdims.at(dim.first).end(), 0);
+
+    datasetdims.at(dim.first) = dim_size;
+  }
+
+  void set_decomposition(CartesianDecomposition decomposition) {
+    this->decomposition = decomposition;
+  }
+
+  void set_max_superdroplets(unsigned int max_superdroplets) {
+    global_superdroplet_ordering.get()->resize(max_superdroplets, -1);
   }
 
   /**
@@ -113,8 +239,6 @@ class Dataset {
                                          const double scale_factor,
                                          const std::vector<size_t> &chunkshape,
                                          const std::vector<std::string> &dimnames) const {
-    for (auto dim : dimnames)
-        std::cout << "size of " << dim << " = " << datasetdims[dim] << std::endl;
     return XarrayZarrArray<Store, T>(group.store, datasetdims, name, units, scale_factor,
                                      chunkshape, dimnames);
   }
@@ -195,7 +319,8 @@ class Dataset {
    */
   template <typename T>
   void write_arrayshape(XarrayZarrArray<Store, T> &xzarr) const {
-    xzarr.write_arrayshape(datasetdims);
+    if (my_rank == 0)
+      xzarr.write_arrayshape(datasetdims);
   }
 
   /**
@@ -207,7 +332,8 @@ class Dataset {
    */
   template <typename T>
   void write_arrayshape(const std::shared_ptr<XarrayZarrArray<Store, T>> xzarr_ptr) const {
-    xzarr_ptr->write_arrayshape(datasetdims);
+    if (my_rank == 0)
+      xzarr_ptr->write_arrayshape(datasetdims);
   }
 
   /**
@@ -218,7 +344,8 @@ class Dataset {
    */
   template <typename T>
   void write_ragged_arrayshape(XarrayZarrArray<Store, T> &xzarr) const {
-    xzarr.write_ragged_arrayshape();
+    if (my_rank == 0)
+      xzarr.write_ragged_arrayshape();
   }
 
   /**
@@ -236,8 +363,11 @@ class Dataset {
   template <typename T>
   void write_to_array(XarrayZarrArray<Store, T> &xzarr,
                       const typename Buffer<T>::viewh_buffer h_data) const {
-    xzarr.write_to_array(h_data);
-    xzarr.write_arrayshape(datasetdims);
+    auto global_data = collect_global_data(h_data, xzarr.get_dimnames());
+    if (my_rank == 0) {
+      xzarr.write_to_array(global_data);
+      xzarr.write_arrayshape(datasetdims);
+    }
   }
 
   /**
@@ -255,8 +385,11 @@ class Dataset {
   template <typename T>
   void write_to_array(const std::shared_ptr<XarrayZarrArray<Store, T>> xzarr_ptr,
                       const typename Buffer<T>::viewh_buffer h_data) const {
-    xzarr_ptr->write_to_array(h_data);
-    xzarr_ptr->write_arrayshape(datasetdims);
+    auto global_data = collect_global_data(h_data, xzarr_ptr->get_dimnames());
+    if (my_rank == 0) {
+        xzarr_ptr->write_to_array(global_data);
+        xzarr_ptr->write_arrayshape(datasetdims);
+    }
   }
 
   /**
@@ -274,8 +407,14 @@ class Dataset {
   template <typename T>
   void write_to_array(const std::shared_ptr<XarrayZarrArray<Store, T>> xzarr_ptr,
                       const T data) const {
-    xzarr_ptr->write_to_array(data);
-    xzarr_ptr->write_arrayshape(datasetdims);
+    T recv_data = data;
+    if (std::same_as<T, unsigned int>) {
+      MPI_Reduce(&data, &recv_data, 1, MPI_UNSIGNED, MPI_SUM, 0, MPI_COMM_WORLD);
+    }
+    if (my_rank == 0) {
+      xzarr_ptr->write_to_array(recv_data);
+      xzarr_ptr->write_arrayshape(datasetdims);
+    }
   }
 
   /**
@@ -293,8 +432,35 @@ class Dataset {
   template <typename T>
   void write_to_ragged_array(XarrayZarrArray<Store, T> &xzarr,
                              const typename Buffer<T>::viewh_buffer h_data) const {
-    xzarr.write_to_array(h_data);
-    xzarr.write_ragged_arrayshape();
+    std::vector<int> distributed_sizes(comm_size);
+    std::vector<int> receive_displacements(comm_size, 0), receive_counts(comm_size, 0);
+    int local_size = h_data.extent(0);
+
+    MPI_Gather(&local_size, 1, MPI_INT, distributed_sizes.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    int global_size = std::accumulate(distributed_sizes.begin(),
+                                      distributed_sizes.end(), 0);
+    Kokkos::View<T*, HostSpace> global_data("global_output_data", global_size);
+
+    for (size_t i = 0; i < comm_size; i++) {
+      receive_counts[i] = distributed_sizes[i];
+      if (i > 0)
+          receive_displacements[i] = receive_displacements[i - 1] + distributed_sizes[i - 1];
+    }
+
+    collect_global_array(global_data.data(), h_data.data(), h_data.extent(0),
+                         receive_counts.data(), receive_displacements.data());
+    if (my_rank == 0) {
+        if (std::same_as<T, unsigned int>) {
+            for (size_t i = 0; i < global_data.extent(0); i++)
+                global_superdroplet_ordering.get()->at(global_data[i]) = i;
+        }
+        Kokkos::View<T*, HostSpace> global_write_data("global_write_data", global_size);
+        for (size_t i = 0; i < global_data.extent(0); i++)
+            global_write_data[i] = global_data[global_superdroplet_ordering.get()->at(i)];
+        xzarr.write_to_array(global_write_data);
+        xzarr.write_ragged_arrayshape();
+    }
   }
 };
 

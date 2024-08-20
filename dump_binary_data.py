@@ -2,6 +2,7 @@ import numpy as np
 from pySD.sdmout_src import pyzarr, pysetuptxt, pygbxsdat
 
 np.set_printoptions(threshold=np.inf)
+np.set_printoptions(suppress=True)
 
 dataset = "/work/ka1298/k202167/remotes/cleo/mpi/CLEO/build/bin/fromfile_sol.zarr"
 setuptxt = "/work/ka1298/k202167/remotes/cleo/mpi/CLEO/build/bin/fromfile_setup.txt"

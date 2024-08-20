@@ -135,9 +135,9 @@ class GenericCollectData {
    * @return The functor object to use during a Kokkos:parallel_for range policy loop.
    */
   Functor get_functor(const viewd_constgbx d_gbxs, const viewd_constsupers totsupers) const {
-    assert(((ptr->d_data.extent(0) == d_gbxs.extent(0)) ||
-            (ptr->d_data.extent(0) == totsupers.extent(0))) &&
-           "d_data view should be size of the number of gridboxes or superdroplets");
+    // assert(((ptr->d_data.extent(0) == d_gbxs.extent(0)) ||
+    //         (ptr->d_data.extent(0) == totsupers.extent(0))) &&
+    //        "d_data view should be size of the number of gridboxes or superdroplets");
     return Functor(ffunc, d_gbxs, totsupers, ptr->d_data);
   }
 

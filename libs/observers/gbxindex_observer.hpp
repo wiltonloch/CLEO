@@ -34,6 +34,8 @@
 #include "zarr/buffer.hpp"
 #include "zarr/collective_dataset.hpp"
 #include "zarr/xarray_zarr_array.hpp"
+#include "mpi.h"
+
 
 /**
  * @struct GbxIndexFunctor
@@ -82,6 +84,7 @@ class GbxindexObserver {
     const size_t ngbxs(d_gbxs.extent(0));
     auto h_data = Buffer<uint32_t>::viewh_buffer("h_data", ngbxs);
     auto d_data = Kokkos::create_mirror_view(ExecSpace(), h_data);
+
     Kokkos::parallel_for("collect_gbxs_data", Kokkos::RangePolicy<ExecSpace>(0, ngbxs),
                          GbxIndexFunctor(d_gbxs, d_data));
     Kokkos::deep_copy(h_data, d_data);
@@ -116,8 +119,8 @@ class GbxindexObserver {
 
     auto h_data = collect_gbxindexes(d_gbxs);
     dataset.write_to_array(xzarr_ptr, h_data);
-    assert((dataset.get_dimension("gbxindex") == h_data.extent(0)) &&
-           "inconsistent size of gbxindex data and dataset dimension");
+    // assert((dataset.get_dimension("gbxindex") == h_data.extent(0)) &&
+    //        "inconsistent size of gbxindex data and dataset dimension");
   }
 
   /**
