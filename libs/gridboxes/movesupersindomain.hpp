@@ -237,10 +237,6 @@ struct MoveSupersInDomain {
                     double_recv_displacements.data(), MPI_DOUBLE,
                     MPI_COMM_WORLD);
 
-      // // Converts global gridbox index to local
-      // for (auto &i : superdrops_uint_recv_data)
-      //   i = domain_decomposition.global_to_local_gridbox_index(i - total_global_gridboxes);
-
       for (unsigned int i = local_superdrops;
            i < local_superdrops + total_superdrops_to_recv;
            i++) {
@@ -253,21 +249,6 @@ struct MoveSupersInDomain {
                                              totsupers[i].get_coord1(),
                                              totsupers[i].get_coord2()};
         unsigned int gridbox_index = domain_decomposition.get_local_bounding_gridbox(drop_coords);
-
-        // if(my_rank == 0 && gridbox_index == 1115)
-        //     std::cout << totsupers[i].get_coord3() << " "
-        //               << totsupers[i].get_coord1() << " "
-        //               << totsupers[i].get_coord2() << " "
-        //               << drop_coords[0] << " "
-        //               << drop_coords[1] << " "
-        //               << drop_coords[2] << " "
-        //               << gbxmaps.get_domain_decomposition()
-                //                 .local_to_global_gridbox_index(totsupers[i].get_sdgbxindex())
-                //                 << std::endl;
-
-        // totsupers[i].set_coord3(drop_coords[0]);
-        // totsupers[i].set_coord1(drop_coords[1]);
-        // totsupers[i].set_coord2(drop_coords[2]);
         totsupers[i].set_sdgbxindex(gridbox_index);
       }
 
@@ -351,22 +332,6 @@ struct MoveSupersInDomain {
 
     /* step (3) */
     enactmotion.move_supers_between_gridboxes(gbxmaps, d_gbxs, totsupers);
-
-    // if (my_rank == 0)
-    //     for (int i = 0; i < totsupers.extent(0); i++)
-    //         if (totsupers[i].get_sdgbxindex() < gbxmaps.get_total_local_gridboxes() &&
-    //             totsupers[i].get_sdgbxindex() == 1115)
-    //             std::cout << t_sdm << " "
-    //                       << totsupers[i].get_coord3() << " "
-    //                       << totsupers[i].get_coord1() << " "
-    //                       << totsupers[i].get_coord2() << " "
-    //                       << totsupers[i].get_sdgbxindex() << " "
-    //                       << gbxmaps.get_domain_decomposition()
-    //                                 .local_to_global_gridbox_index(totsupers[i].get_sdgbxindex())
-    //                       << std::endl;
-
-    // if (my_rank == 0 && t_sdm > 0)
-    //     MPI_Abort(MPI_COMM_WORLD, 1);
 
     /* step (4) */
     apply_domain_boundary_conditions(gbxmaps, d_gbxs, totsupers);
