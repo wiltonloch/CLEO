@@ -202,7 +202,13 @@ class XarrayZarrArray {
     }
   }
 
-  ~XarrayZarrArray() { zarr.write_arrayshape(arrayshape); }
+  ~XarrayZarrArray() {
+    int my_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+
+    if (my_rank == 0)
+      zarr.write_arrayshape(arrayshape);
+  }
 
   /**
    * @brief Returns the name and size of the dimensions of the array (unordered).
