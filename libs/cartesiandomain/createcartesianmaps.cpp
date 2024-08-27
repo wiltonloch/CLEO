@@ -269,7 +269,7 @@ void set_3Dmodel_maps(const GbxBoundsFromBinary &gfb, CartesianMaps &gbxmaps) {
   auto partition_origin = domain_decomposition.get_local_partition_origin();
   auto partition_size = domain_decomposition.get_local_partition_size();
   auto total_global_gridboxes = domain_decomposition.get_total_global_gridboxes();
-  domain_decomposition.set_dimensions_bound_behavior({1, 1, 1});
+  domain_decomposition.set_dimensions_bound_behavior({0, 1, 1});
 
   for (size_t k = 0; k < partition_size[0]; k++)
       for (size_t i = 0; i < partition_size[1]; i++)

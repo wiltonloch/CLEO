@@ -78,15 +78,20 @@ CartesianDecomposition::get_local_bounding_gridbox(std::array<double, 3> & coord
 
   for (auto dimension : {0, 1, 2})
     if (coordinates[dimension] < domain_begin_coordinates[dimension]) {
-      if (dimension_bound_behavior[dimension] == 0)
+      if (dimension_bound_behavior[dimension] == 0 && coordinates[dimension] < 0)
         return LIMITVALUES::uintmax;
+
       external_direction[dimension] -= 1;
       local_coordinate = false;
+
     } else if (coordinates[dimension] > domain_end_coordinates[dimension]) {
-      if (dimension_bound_behavior[dimension] == 0)
+      if (dimension_bound_behavior[dimension] == 0 &&
+          coordinates[dimension] > ndims[dimension] * gridbox_size[dimension])
         return LIMITVALUES::uintmax;
+
       external_direction[dimension] += 1;
       local_coordinate = false;
+
     } else if (local_coordinate) {
       int multiplications = std::max({get_multiplications_to_turn_int(coordinates[dimension]),
                                      get_multiplications_to_turn_int(
