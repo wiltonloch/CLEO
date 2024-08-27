@@ -35,8 +35,8 @@ class CartesianDecomposition {
     // Sizes of all partitions
     std::vector<std::array<size_t, 3>> partition_sizes;
 
-    std::array<double, 3> domain_begin_coordinates;
-    std::array<double, 3> domain_end_coordinates;
+    std::array<double, 3> partition_begin_coordinates;
+    std::array<double, 3> partition_end_coordinates;
 
     std::array<double, 3> gridbox_size;
     std::array<size_t, 3> dimension_bound_behavior;
@@ -73,8 +73,8 @@ class CartesianDecomposition {
     int global_to_local_gridbox_index(size_t global_gridbox_index) const;
 
     // Checks whether a coordinate is bounded by one specific partition
-    bool check_coordinates_inside_partition(std::array<size_t, 3> coordinates,
-                                            int partition_index) const;
+    bool check_indices_inside_partition(std::array<size_t, 3> indices,
+                                        int partition_index) const;
 
     void calculate_neighboring_processes();
 
@@ -104,9 +104,10 @@ size_t get_index_from_coordinates(const std::vector<size_t> &ndims, const size_t
 std::array<size_t, 3> get_coordinates_from_index(const std::vector<size_t> &ndims,
                                                  const size_t index);
 std::vector<std::vector<size_t>> factorize(int n);
-void factorizeHelper(int n, int start, std::vector<size_t> &current,
+void factorize_helper(int n, int start, std::vector<size_t> &current,
                      std::vector<std::vector<size_t>> &result);
-void heapPermutation(std::vector<std::vector<size_t>> &results, std::vector<size_t> arr,
+void heap_permutation(std::vector<std::vector<size_t>> &results, std::vector<size_t> arr,
                      int size);
+int get_multiplications_to_turn_int(double entry_value);
 
 #endif  // LIBS_CARTESIANDOMAIN_CARTESIAN_DECOMPOSITION_HPP_

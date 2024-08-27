@@ -239,7 +239,7 @@ kkpair_size_t correct_neighbor_indices(kkpair_size_t neighbours,
 
   if (neighbours.first != outofbounds_gbxindex()) {
     neighbor_coordinates = get_coordinates_from_index(ndims, neighbours.first);
-    if (domain_decomposition.check_coordinates_inside_partition(neighbor_coordinates, my_rank))
+    if (domain_decomposition.check_indices_inside_partition(neighbor_coordinates, my_rank))
       neighbours.first = domain_decomposition.global_to_local_gridbox_index(neighbours.first);
     else
       neighbours.first += domain_decomposition.get_total_global_gridboxes();
@@ -247,7 +247,7 @@ kkpair_size_t correct_neighbor_indices(kkpair_size_t neighbours,
 
   if (neighbours.second != outofbounds_gbxindex()) {
     neighbor_coordinates = get_coordinates_from_index(ndims, neighbours.second);
-    if (domain_decomposition.check_coordinates_inside_partition(neighbor_coordinates, my_rank))
+    if (domain_decomposition.check_indices_inside_partition(neighbor_coordinates, my_rank))
       neighbours.second = domain_decomposition.global_to_local_gridbox_index(neighbours.second);
     else
       neighbours.second += domain_decomposition.get_total_global_gridboxes();
