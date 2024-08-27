@@ -143,7 +143,6 @@ struct MoveSupersInDomain {
       // Go through superdrops from back to front and find how many should be sent and their indices
       while (drop.get_sdgbxindex() >= ngbxs) {
         if (drop.get_sdgbxindex() < LIMITVALUES::uintmax) {
-          // size_t global_gridbox_index = drop.get_sdgbxindex() - total_global_gridboxes;
           int target_process = (LIMITVALUES::uintmax - drop.get_sdgbxindex()) - 1;
           per_process_send_superdrops[target_process]++;
           superdrops_indices_per_process[target_process].push_back(superdrop_index);
@@ -245,13 +244,19 @@ struct MoveSupersInDomain {
                                             superdrops_uint64_recv_data.begin() + data_offset,
                                             superdrops_double_recv_data.begin() +
                                             data_offset * 5);
+
+        // Get the local gridbox index which contains the superdroplet
         std::array<double, 3> drop_coords = {totsupers[i].get_coord3(),
                                              totsupers[i].get_coord1(),
                                              totsupers[i].get_coord2()};
         unsigned int gridbox_index = domain_decomposition.get_local_bounding_gridbox(drop_coords);
+
+        // Since the coordinates have already been corrected in the sending
+        // process here just the gridbox index update is necessary
         totsupers[i].set_sdgbxindex(gridbox_index);
       }
 
+      // Reset all remaining non-used superdroplet spots
       for (unsigned int i = local_superdrops + total_superdrops_to_recv;
            i < totsupers.extent(0);
            i++)

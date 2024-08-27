@@ -72,14 +72,19 @@ struct PredCorrMotion {
     std::array<double, 3> drop_coords = {drop.get_coord3(), drop.get_coord1(), drop.get_coord2()};
     unsigned int idx = gbxmaps.get_domain_decomposition().get_local_bounding_gridbox(drop_coords);
 
+    // Sets the updated superdroplet coordinates and gridbox index
     drop.set_coord3(drop_coords[0]);
     drop.set_coord1(drop_coords[1]);
     drop.set_coord2(drop_coords[2]);
     drop.set_sdgbxindex(idx);
 
+    // If the index is non-local return
+    // For superdrops going to other processes checks will be perfomed in the receiver
+    // For out of bounds index nothing will be done
     if (idx >= gbxmaps.get_total_local_gridboxes())
         return;
 
+    // Checks that the drop coordinates match the ones of the gridbox
     check_bounds(idx, gbxmaps.coord3bounds(idx), drop.get_coord3());
     check_bounds(idx, gbxmaps.coord1bounds(idx), drop.get_coord1());
     check_bounds(idx, gbxmaps.coord2bounds(idx), drop.get_coord2());
