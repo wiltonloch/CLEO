@@ -63,6 +63,11 @@ class Dataset {
   std::unordered_map<std::string, std::vector<size_t>> distributed_datasetdims;
   int my_rank, comm_size;
 
+  /**
+   * @brief Collects the distributed process-local size of dimensions
+   *
+   * @param dim A pair with the dimension name and local size
+   */
   void collect_distributed_dim_size(const std::pair<std::string, size_t> &dim) {
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
@@ -79,6 +84,12 @@ class Dataset {
             distributed_datasetdims.insert({dim.first, distributed_sizes});
   }
 
+  /**
+   * @brief Collects the distributed process-local data for a particular write
+   *
+   * @param data A Kokkos view containing the data to be collected
+   * @param dimnames The names of the dimensions related to the array
+   */
   template <typename T>
   Kokkos::View<T*, HostSpace> collect_global_data(Kokkos::View<T*, HostSpace> data,
                                                   std::vector<std::string> dimnames) const {
@@ -129,6 +140,17 @@ class Dataset {
     }
   }
 
+  /**
+   * @brief Correcly orders global data following the global gridbox order
+   *
+   * Given a source and a target array, correctly orders data from the source on
+   * the target following the global gridbox ordering
+   *
+   * @param dimension The dimension name which should be the gridboxes
+   * @param source The array to take the data from
+   * @param target The array to write the data to, according to the global
+   * gridbox order
+   */
   template <typename T>
   void correct_gridbox_data(std::string dimension, T * target, T * source) const {
     int process = 0;
@@ -144,12 +166,18 @@ class Dataset {
     }
   }
 
+  /**
+   * @brief Wrapper for MPI gatherv call for a float array
+   */
   void collect_global_array(float * target, float * local_source, int local_size,
                              int * receive_counts, int * receive_displacements) const {
     MPI_Gatherv(local_source, local_size, MPI_FLOAT,
                 target, receive_counts, receive_displacements, MPI_FLOAT, 0, MPI_COMM_WORLD);
   }
 
+  /**
+   * @brief Wrapper for MPI gatherv call for a unsigned int array
+   */
   void collect_global_array(unsigned int * target, unsigned int * local_source, int local_size,
                              int * receive_counts, int * receive_displacements) const {
     MPI_Gatherv(local_source, local_size, MPI_UNSIGNED,
@@ -215,10 +243,20 @@ class Dataset {
     datasetdims.at(dim.first) = dim_size;
   }
 
+  /**
+   * @brief Sets the decomposition maps for correctly writing data out
+   *
+   * @param decomposition A CartesianDecomposition instance with the domain decomposition
+   */
   void set_decomposition(CartesianDecomposition decomposition) {
     this->decomposition = decomposition;
   }
 
+  /**
+   * @brief Sets the maximum number of superdroplets for data allocation, comes from the config file
+   *
+   * @param max_superdroplets The maximum number of superdroplets of the model
+   */
   void set_max_superdroplets(unsigned int max_superdroplets) {
     global_superdroplet_ordering.get()->resize(max_superdroplets, -1);
   }
