@@ -118,8 +118,14 @@ class Chunks {
       : chunkshape(chunkshape), reducedarray_nchunks(chunkshape.size() - 1, 0) {
     /* number of dimensions (ndims) of actual array = ndims of array's chunks, is 1 more than
     ndims of reduced arrayshape (because reduced arrayshape excludes outermost (0th) dimension)). */
-    assert((reduced_arrayshape.size() == chunkshape.size() - 1) &&
-           "number of dimensions of reduced array must be 1 less than that of chunks (i.e. array)");
+
+    // Since only process 0 writes the data, only it should check the sizes
+    int my_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+    if (my_rank == 0)
+      assert((reduced_arrayshape.size() == chunkshape.size() - 1) &&
+             "number of dimensions of reduced array must be "
+             "1 less than that of chunks (i.e. array)");
 
     /* set number of chunks along all but array's outermost dimension given
     the shape of each chunk and expected shape of final array along those dimensions */
