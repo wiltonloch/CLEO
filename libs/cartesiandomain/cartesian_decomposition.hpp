@@ -35,18 +35,31 @@ class CartesianDecomposition {
     // Sizes of all partitions
     std::vector<std::array<size_t, 3>> partition_sizes;
 
+    // Geometrical coordinates of the local partition begin and end
     std::array<double, 3> partition_begin_coordinates;
     std::array<double, 3> partition_end_coordinates;
 
+    // Sizes of a gridbox
     std::array<double, 3> gridbox_size;
+
+    // Behavior of each dimension, being either periodic or finite
     std::array<size_t, 3> dimension_bound_behavior;
 
+    // Which process neighbors the current one in each direction
+    // (it can also be the same as the local one)
     std::map<std::array<int, 3>, int> neighboring_processes;
+
+    // Domain decomposition factors for each dimension
+    // (i.e. in how many parts each dimension is divided)
     std::array<size_t, 3> decomposition;
     // Number of local gridboxes
     size_t total_local_gridboxes;
 
-    void calculate_domain_coordinates();
+    // Fill the partition_begin_coordinates and partition_end_coordinates arrays
+    void calculate_partition_coordinates();
+
+    // Fills the neighboring_processes array
+    void calculate_neighboring_processes();
 
  public:
     CartesianDecomposition();
@@ -58,30 +71,31 @@ class CartesianDecomposition {
                 double gridbox_x_size,
                 double gridbox_y_size);
 
+    // Local and global amount of gridboxes
     size_t get_total_local_gridboxes() const;
     size_t get_total_global_gridboxes() const;
+
+    // Get the origin and size of local partition in terms of number of gridboxes
     std::array<size_t, 3> get_local_partition_origin() const;
     std::array<size_t, 3> get_local_partition_size() const;
-    int get_gridbox_owner_process(size_t global_gridbox_index) const;
+
+    // Get partition index and partition coordinates
     int get_partition_index_from_slice(std::array<int, 3> slice_indices) const;
     std::array<int, 3> get_slice_indices_from_partition(int partition_index) const;
-
-    void set_gridbox_size(double z_size, double x_size, double y_size);
-    void set_dimensions_bound_behavior(std::array<size_t, 3> behaviors);
-
-    int local_to_global_gridbox_index(size_t local_gridbox_index, int process = -1) const;
-    int global_to_local_gridbox_index(size_t global_gridbox_index) const;
-
     // Checks whether a coordinate is bounded by one specific partition
     bool check_indices_inside_partition(std::array<size_t, 3> indices,
                                         int partition_index) const;
 
-    void calculate_neighboring_processes();
-
+    // Gridbox related subroutines
+    int local_to_global_gridbox_index(size_t local_gridbox_index, int process = -1) const;
+    int global_to_local_gridbox_index(size_t global_gridbox_index) const;
+    int get_gridbox_owner_process(size_t global_gridbox_index) const;
     size_t get_local_bounding_gridbox(std::array<double, 3> & coordinates) const;
+    void set_gridbox_size(double z_size, double x_size, double y_size);
+
+    // Sets the behavior of all dimensions
+    void set_dimensions_bound_behavior(std::array<size_t, 3> behaviors);
 };
-
-
 
 // Given the global domain, a global decomposition and a partition index,
 // returns the partition origin and size
@@ -99,10 +113,13 @@ void permute_and_trim_factorizations(std::vector<std::vector<size_t>> &factors,
 int find_best_decomposition(std::vector<std::vector<size_t>> &factors,
                             const std::vector<size_t> ndims);
 
+// Functions for getting indexes and coordinates in an arbitrary 3D gridbox domain
 size_t get_index_from_coordinates(const std::vector<size_t> &ndims, const size_t k, const size_t i,
                                   const size_t j);
 std::array<size_t, 3> get_coordinates_from_index(const std::vector<size_t> &ndims,
                                                  const size_t index);
+
+// Support functions
 std::vector<std::vector<size_t>> factorize(int n);
 void factorize_helper(int n, int start, std::vector<size_t> &current,
                      std::vector<std::vector<size_t>> &result);

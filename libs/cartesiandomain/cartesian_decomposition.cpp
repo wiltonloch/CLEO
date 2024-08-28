@@ -262,7 +262,7 @@ bool CartesianDecomposition::create(std::vector<size_t> ndims,
                             partition_sizes[my_rank][2];
     decomposition = {1, 1, 1};
 
-    calculate_domain_coordinates();
+    calculate_partition_coordinates();
     calculate_neighboring_processes();
 
     return true;
@@ -312,7 +312,7 @@ bool CartesianDecomposition::create(std::vector<size_t> ndims,
                           partition_sizes[my_rank][1] *
                           partition_sizes[my_rank][2];
 
-  calculate_domain_coordinates();
+  calculate_partition_coordinates();
   calculate_neighboring_processes();
 
   return true;
@@ -348,7 +348,7 @@ void CartesianDecomposition::calculate_neighboring_processes() {
 }
 
 // Calculates the geometrical coordinates of the beginning and end of the local partition
-void CartesianDecomposition::calculate_domain_coordinates() {
+void CartesianDecomposition::calculate_partition_coordinates() {
   int my_rank;
   auto partition_origin = get_local_partition_origin();
   auto partition_size = get_local_partition_size();
