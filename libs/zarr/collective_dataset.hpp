@@ -77,6 +77,8 @@ class Dataset {
     MPI_Gather(&(dim.second), 1, MPI_UNSIGNED_LONG,
                distributed_sizes.data(), 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
 
+    // For process 0, save the distributed sizes of all processes to avoid extra
+    // exchanges in each write
     if (my_rank == 0)
         if (distributed_datasetdims.contains(dim.first))
             distributed_datasetdims.at(dim.first) = distributed_sizes;
@@ -85,7 +87,7 @@ class Dataset {
   }
 
   /**
-   * @brief Collects the distributed process-local data for a particular write
+   * @brief Collects the distributed process-local data for a write
    *
    * @param data A Kokkos view containing the data to be collected
    * @param dimnames The names of the dimensions related to the array
@@ -95,48 +97,52 @@ class Dataset {
                                                   std::vector<std::string> dimnames) const {
     size_t innermost_dimension = dimnames.size() - 1;
     if (my_rank == 0) {
-        std::vector<int> receive_displacements(comm_size, 0), receive_counts(comm_size, 0);
-        size_t global_size = std::accumulate(
-                               distributed_datasetdims.at(dimnames[innermost_dimension]).begin(),
-                               distributed_datasetdims.at(dimnames[innermost_dimension]).end(),
-                               0);
-        Kokkos::View<T*, HostSpace> global_data("global_output_data", global_size);
+      std::vector<int> receive_displacements(comm_size, 0), receive_counts(comm_size, 0);
+      size_t global_size = datasetdims.at(dimnames[innermost_dimension]);
+      Kokkos::View<T*, HostSpace> global_data("global_output_data", global_size);
 
-        for (size_t i = 0; i < comm_size; i++) {
-          receive_counts[i] = static_cast<int>(
-                                distributed_datasetdims.at(dimnames[innermost_dimension])[i]);
-          if (i > 0)
-              receive_displacements[i] =
-                receive_displacements[i - 1] +
-                distributed_datasetdims.at(dimnames[innermost_dimension])[i - 1];
+      // Calculate the receive counts and displacements to receive the data
+      for (size_t i = 0; i < comm_size; i++) {
+        receive_counts[i] = static_cast<int>
+                            (distributed_datasetdims.at(dimnames[innermost_dimension])[i]);
+        if (i > 0)
+          receive_displacements[i] = receive_displacements[i - 1] +
+                                     distributed_datasetdims
+                                     .at(dimnames[innermost_dimension])[i - 1];
+      }
+
+      // If the exchanges are for gridbox data extra actions are needed
+      if (dimnames[innermost_dimension] == "gbxindex") {
+        // If there is only the gridbox dimension, then this is the gridbox
+        // index array and can be trivially constructed without exchanges
+        if (dimnames.size() == 1) {
+          for (size_t i = 0; i < decomposition.get_total_global_gridboxes(); i++)
+            global_data[i] = i;
+        } else {
+          // All other gridbox-defined data must be correctly ordered to follow
+          // the global gridbox ordering
+          std::vector<T> receive_target(global_size);
+          collect_global_array(receive_target.data(), data.data(),
+                               distributed_datasetdims.at(dimnames[innermost_dimension])[0],
+                               receive_counts.data(), receive_displacements.data());
+          correct_gridbox_data(dimnames[innermost_dimension],
+                               global_data.data(), receive_target.data());
         }
+      } else {
+        collect_global_array(global_data.data(), data.data(),
+                             distributed_datasetdims.at(dimnames[innermost_dimension])[0],
+                             receive_counts.data(), receive_displacements.data());
+      }
 
-        if (dimnames[innermost_dimension] == "gbxindex") {
-            if (dimnames.size() == 1)
-                for (size_t i = 0; i < decomposition.get_total_global_gridboxes(); i++)
-                    global_data[i] = i;
-            else {
-                std::vector<T> receive_target(global_size);
-                collect_global_array(receive_target.data(), data.data(),
-                                     distributed_datasetdims.at(dimnames[innermost_dimension])[0],
-                                     receive_counts.data(), receive_displacements.data());
-                correct_gridbox_data(dimnames[innermost_dimension],
-                                     global_data.data(), receive_target.data());
-            }
-        } else
-            collect_global_array(global_data.data(), data.data(),
-                                 distributed_datasetdims.at(dimnames[innermost_dimension])[0],
-                                 receive_counts.data(), receive_displacements.data());
-
-        return global_data;
+      return global_data;
     } else {
-        if (dimnames.size() != 1)
-            collect_global_array(nullptr, data.data(),
-                                 datasetdims.at(dimnames[innermost_dimension]),
-                                 nullptr, nullptr);
+      // Don't perform an exchange for the gridbox index array
+      if (dimnames.size() != 1)
+        collect_global_array(nullptr, data.data(),
+                             datasetdims.at(dimnames[innermost_dimension]),
+                             nullptr, nullptr);
 
-        Kokkos::View<T*, HostSpace> view;
-        return view;
+      return Kokkos::View<T*, HostSpace>();
     }
   }
 
@@ -144,7 +150,8 @@ class Dataset {
    * @brief Correcly orders global data following the global gridbox order
    *
    * Given a source and a target array, correctly orders data from the source on
-   * the target following the global gridbox ordering
+   * the target following the global gridbox ordering. Should be called only on
+   * process 0.
    *
    * @param dimension The dimension name which should be the gridboxes
    * @param source The array to take the data from
@@ -156,13 +163,13 @@ class Dataset {
     int process = 0;
     size_t offset = 0;
     for (int process = 0; process < comm_size; process++) {
-        for (size_t i = 0;
-             i < distributed_datasetdims.at(dimension)[process];
-             i++) {
-            size_t global_gridbox_index = decomposition.local_to_global_gridbox_index(i, process);
-            target[global_gridbox_index] = source[offset + i];
-        }
-        offset += distributed_datasetdims.at(dimension)[process];
+      for (size_t i = 0;
+           i < distributed_datasetdims.at(dimension)[process];
+           i++) {
+        size_t global_gridbox_index = decomposition.local_to_global_gridbox_index(i, process);
+        target[global_gridbox_index] = source[offset + i];
+      }
+      offset += distributed_datasetdims.at(dimension)[process];
     }
   }
 
@@ -192,6 +199,9 @@ class Dataset {
   void add_dimension(const std::pair<std::string, size_t> &dim) {
     collect_distributed_dim_size(dim);
     size_t dim_size = dim.second;
+
+    // The time dimension has the global size in all processes and therefore
+    // should not be accumulated
     if (my_rank == 0 && dim.first != "time")
       dim_size = std::accumulate(distributed_datasetdims.at(dim.first).begin(),
                                  distributed_datasetdims.at(dim.first).end(), 0);
@@ -236,6 +246,8 @@ class Dataset {
     collect_distributed_dim_size(dim);
     size_t dim_size = dim.second;
 
+    // The time dimension has the global size in all processes and therefore
+    // should not be accumulated
     if (my_rank == 0 && dim.first != "time")
         dim_size = std::accumulate(distributed_datasetdims.at(dim.first).begin(),
                                    distributed_datasetdims.at(dim.first).end(), 0);
@@ -474,30 +486,41 @@ class Dataset {
     std::vector<int> receive_displacements(comm_size, 0), receive_counts(comm_size, 0);
     int local_size = h_data.extent(0);
 
+    // Since there is no defined dimensions for ragged arrays collect the array sizes directly
     MPI_Gather(&local_size, 1, MPI_INT, distributed_sizes.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-    int global_size = std::accumulate(distributed_sizes.begin(),
-                                      distributed_sizes.end(), 0);
+    int global_size = std::accumulate(distributed_sizes.begin(), distributed_sizes.end(), 0);
     Kokkos::View<T*, HostSpace> global_data("global_output_data", global_size);
 
+    // Calculate the receive counts and displacements (meaningful only for process 0)
     for (size_t i = 0; i < comm_size; i++) {
       receive_counts[i] = distributed_sizes[i];
       if (i > 0)
-          receive_displacements[i] = receive_displacements[i - 1] + distributed_sizes[i - 1];
+        receive_displacements[i] = receive_displacements[i - 1] + distributed_sizes[i - 1];
     }
 
+    // Collect the global data
     collect_global_array(global_data.data(), h_data.data(), h_data.extent(0),
                          receive_counts.data(), receive_displacements.data());
+
+    // IMPORTANT: In order to write the data correctly this function requires a
+    // global superdroplet ordering. This is constructed based on the
+    // superdroplet indices, which are unique globally. This means however, that
+    // the superdroplet index observer must ALWAYS be the first in the output
+    // order, so that subsequent writes use the correct ordering.
     if (my_rank == 0) {
-        if (std::same_as<T, unsigned int>) {
-            for (size_t i = 0; i < global_data.extent(0); i++)
-                global_superdroplet_ordering.get()->at(global_data[i]) = i;
-        }
-        Kokkos::View<T*, HostSpace> global_write_data("global_write_data", global_size);
+      // If this is the superdrop index fill the ordering array
+      if (std::same_as<T, unsigned int>) {
         for (size_t i = 0; i < global_data.extent(0); i++)
-            global_write_data[i] = global_data[global_superdroplet_ordering.get()->at(i)];
-        xzarr.write_to_array(global_write_data);
-        xzarr.write_ragged_arrayshape();
+          global_superdroplet_ordering.get()->at(global_data[i]) = i;
+      }
+      // Correctly orders the data based on the global superdroplet ordering
+      Kokkos::View<T*, HostSpace> global_write_data("global_write_data", global_size);
+      for (size_t i = 0; i < global_data.extent(0); i++)
+        global_write_data[i] = global_data[global_superdroplet_ordering.get()->at(i)];
+
+      // Writes the final array
+      xzarr.write_to_array(global_write_data);
+      xzarr.write_ragged_arrayshape();
     }
   }
 };
